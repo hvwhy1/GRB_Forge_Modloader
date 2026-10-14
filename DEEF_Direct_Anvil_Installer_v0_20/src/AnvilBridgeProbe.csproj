@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>DEEF.AnvilBridgeProbe</AssemblyName>
+    <AnvilToolkitDirectory Condition="'$(AnvilToolkitDirectory)' == ''">$(ANVIL_TOOLKIT_DIR)</AnvilToolkitDirectory>
+  </PropertyGroup>
+<ItemGroup><Reference Include="AnvilToolkit"><HintPath>$(AnvilToolkitDirectory)\AnvilToolkit.dll</HintPath><Private>false</Private></Reference></ItemGroup>
+<Target Name="ValidateAnvilToolkitDirectory" BeforeTargets="ResolveReferences">
+  <Error Condition="!Exists('$(AnvilToolkitDirectory)\AnvilToolkit.dll')" Text="Set AnvilToolkitDirectory or ANVIL_TOOLKIT_DIR to the complete original toolkit folder." />
+</Target>
+</Project>
+

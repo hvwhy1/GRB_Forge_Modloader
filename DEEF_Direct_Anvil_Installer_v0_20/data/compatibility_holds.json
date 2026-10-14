@@ -1,0 +1,48 @@
+{
+  "evidence": "workspace/diagnostics/WITHOUT_CAMERA_TWEAKS_STARTUP.json",
+  "routes": [
+    {
+      "archiveName": "Various Tweaks-537-1-1700176055.rar",
+      "archiveSha256": "2df2148aa6c4445af26ef524b131bbbef664471f2c195dac412a01e3d2dd49c2",
+      "member": "No ADS zoom/Put in 0_-_Game Bootstrap Settings.data/1_-_TGT_Player_Stand_OTS.CameraSelectorNode",
+      "object": "54250_-_TGT_Player_Stand_OTS.CameraSelectorNode",
+      "reason": "GAME_STARTUP_COMPATIBILITY_HOLD: 471-edit batch crashed; the same 469 edits without this two-camera-tweak group survived 90 seconds. Group held pending individual compatibility repair."
+    },
+    {
+      "archiveName": "Various Tweaks-537-1-1700176055.rar",
+      "archiveSha256": "2df2148aa6c4445af26ef524b131bbbef664471f2c195dac412a01e3d2dd49c2",
+      "member": "No sprint zoom/Put in 0_-_Game Bootstrap Settings.data/4_-_TGT_Player_Rush.CameraSelectorNode",
+      "object": "53530_-_TGT_Player_Rush.CameraSelectorNode",
+      "reason": "GAME_STARTUP_COMPATIBILITY_HOLD: 471-edit batch crashed; the same 469 edits without this two-camera-tweak group survived 90 seconds. Group held pending individual compatibility repair."
+    },
+    {
+      "archiveName": "Various Tweaks-537-1-1700176055.rar",
+      "archiveSha256": "2df2148aa6c4445af26ef524b131bbbef664471f2c195dac412a01e3d2dd49c2",
+      "member": "Item wheel swap/Syringe and Binoculars/Put in 0_-_Game Bootstrap Settings.data/1_-_DBItemSetting_HealingItemEssence_Bandages.DBToolSetting",
+      "object": "1_-_DBItemSetting_HealingItemEssence_Bandages.DBToolSetting",
+      "reason": "GAME_STARTUP_COMPATIBILITY_HOLD: item-wheel-only control crashed after 21.9 seconds with original camera nodes; the same base without these two replacements reached gameplay. User authorized removing this incompatible item-wheel replacement."
+    },
+    {
+      "archiveName": "Various Tweaks-537-1-1700176055.rar",
+      "archiveSha256": "2df2148aa6c4445af26ef524b131bbbef664471f2c195dac412a01e3d2dd49c2",
+      "member": "Item wheel swap/Syringe and Binoculars/Put in 0_-_Game Bootstrap Settings.data/2_-_DBItemSetting_ThrowableBullet.DBToolSetting",
+      "object": "2_-_DBItemSetting_ThrowableBullet.DBToolSetting",
+      "reason": "GAME_STARTUP_COMPATIBILITY_HOLD: item-wheel-only control crashed after 21.9 seconds with original camera nodes; the same base without these two replacements reached gameplay. User authorized removing this incompatible item-wheel replacement."
+    },
+    {
+      "archiveName": "No ADS Zoom Updated-537-1-1703321273.rar",
+      "archiveSha256": "e73b1d46bbea2e88dfec59f4983a34efc38123e40f1d529362278be23e9e4db7",
+      "member": "Put in 0_-_Game Bootstrap Settings.data/1_-_TGT_Player_Crouch_OTS.CameraSelectorNode",
+      "object": "1_-_TGT_Player_Crouch_OTS.CameraSelectorNode",
+      "reason": "GAME_STARTUP_COMPATIBILITY_HOLD: camera-only control with original item-wheel settings crashed at startup; user authorized removing incompatible replacements. Original camera nodes and configurable DX11 FPV camera remain available."
+    },
+    {
+      "archiveName": "No ADS Zoom Updated-537-1-1703321273.rar",
+      "archiveSha256": "e73b1d46bbea2e88dfec59f4983a34efc38123e40f1d529362278be23e9e4db7",
+      "member": "Put in 0_-_Game Bootstrap Settings.data/1_-_TGT_Player_Stand_OTS.CameraSelectorNode",
+      "object": "1_-_TGT_Player_Stand_OTS.CameraSelectorNode",
+      "reason": "GAME_STARTUP_COMPATIBILITY_HOLD: camera-only control with original item-wheel settings crashed at startup; user authorized removing incompatible replacements. Original camera nodes and configurable DX11 FPV camera remain available."
+    }
+  ],
+  "schema": 1
+}
