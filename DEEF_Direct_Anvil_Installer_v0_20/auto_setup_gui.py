@@ -61,7 +61,7 @@ def create_paths(archive_dir, game, kit, backup):
     return ar,gm,tk,bk
 
 
-def perform(archive_dir,game,toolkit,backup, *, stage=True, install=False,
+def _perform(archive_dir,game,toolkit,backup, *, stage=True, install=False,
             allow_subset=False,notify=lambda x:print(x,flush=True),
             saved_mods=None, inspect=None, stage_func=None, game_check=be.game_processes_running,
             full_game_scan=False):
@@ -193,5 +193,26 @@ def cli():
         full_game_scan=args.full_game_scan)
     print('Result:',run/'AUTO_SETUP_RESULT.json');print('Status:',report['state'])
     if report['state'] in ('FAILED','PLAN_BLOCKED','INCOMPLETE_REVIEW_REQUIRED'):sys.exit(2)
+
+
+
+def perform(*args, build_scope='ENABLED_MOD_SELECTION', **kwargs):
+    """Keep single-mod diagnostics and analysis results out of live installation."""
+    if not kwargs.get('stage',True) and build_scope=='ENABLED_MOD_SELECTION':build_scope='ANALYSIS_ONLY'
+    private=build_scope!='ENABLED_MOD_SELECTION'
+    if private and kwargs.get('install'):
+        raise ValueError('Diagnostic/analysis batches cannot be installed. Use Enabled mod selection and Scan and stage.')
+    run,report=_perform(*args,**kwargs)
+    report['buildScope']=build_scope
+    report['installable']=not private
+    if report.get('batch'):
+        manifest=Path(report['batch']);state=json.loads(manifest.read_text(encoding='utf-8'))
+        state['buildScope']=build_scope
+        report['selectedArchiveCount']=len(state.get('selectedArchives',[key for key,mod in mm.load(mm.STATE,{}).items() if mod.get('enabled',True)]))
+        if private:state['privateOnly']=True
+        be.record_json(manifest,state)
+    be.record_json(Path(run)/'AUTO_SETUP_RESULT.json',report)
+    return run,report
+
 
 if __name__=='__main__':cli()

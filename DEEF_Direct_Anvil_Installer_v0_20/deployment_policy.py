@@ -80,6 +80,8 @@ def stamp(state):
 
 
 def require_install(state, manifest):
+    if state.get('buildScope') not in (None,'ENABLED_MOD_SELECTION'):
+        raise ValueError('Diagnostic batches cannot be installed. Choose Enabled mod selection and Scan and stage.')
     baseline = require_ready(state.get('plan', {}).get('gameRoot'))
     manifest = Path(manifest).resolve()
     if WORK.resolve() not in manifest.parents:

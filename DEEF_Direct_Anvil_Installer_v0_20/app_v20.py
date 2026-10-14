@@ -129,10 +129,15 @@ class App:
         ttk.Separator(page).pack(fill='x',pady=10)
         profiles=ttk.Frame(page);profiles.pack(fill='x',pady=15)
         ttk.Label(profiles,text='Stage profile').pack(side='left',padx=(0,12))
-        ttk.Combobox(profiles,textvariable=self.profile,values=['Enabled mod selection','One mod diagnostic'],
-                     state='readonly',width=25).pack(side='left')
-        self.mod_choice=ttk.Combobox(profiles,textvariable=self.single_mod,state='readonly',width=43)
+        profile_choice=ttk.Combobox(profiles,textvariable=self.profile,values=['Enabled mod selection','One mod diagnostic'],
+                     state='readonly',width=25)
+        profile_choice.pack(side='left')
+        self.mod_choice=ttk.Combobox(profiles,textvariable=self.single_mod,state='disabled',width=43)
         self.mod_choice.pack(side='left',padx=10)
+        profile_choice.bind('<<ComboboxSelected>>',lambda _:self.mod_choice.configure(
+            state='readonly' if self.profile.get()=='One mod diagnostic' else 'disabled'))
+        ttk.Label(page,text='One mod diagnostic creates a report for troubleshooting; it cannot be installed.',
+                  style='Muted.TLabel').pack(anchor='w')
         self.button(profiles,'Refresh',self.refresh_mods).pack(side='left')
         actions=ttk.Frame(page);actions.pack(fill='x',pady=5)
         self.button(actions,'1 - Record verified baseline',self.baseline,True).pack(side='left',padx=(0,8))
@@ -311,14 +316,21 @@ class App:
             try:
                 return perform(paths['archive_dir'],paths['game_root'],paths['toolkit'],paths['backup_root'],
                     stage=not analyze_only,install=False,allow_subset=True,full_game_scan=True,
-                    saved_mods=saved,notify=self.notify)
+                    saved_mods=saved,notify=self.notify,
+                    build_scope='DIAGNOSTIC_SINGLE_MOD' if selected else 'ENABLED_MOD_SELECTION')
             finally:
                 if previous_selection is not None:mm.save(mm.STATE,previous_selection)
         def done(result):
-            run,report=result;self.manifest=report.get('batch')
+            run,report=result
+            if not report.get('installable',True):
+                self.manifest=None
+                self.stage_text.set('Diagnostic/analysis only - report '+str(run))
+                self.status.set('Cannot install this result. Choose Enabled mod selection and Scan and stage for the complete setup.')
+                return
+            self.manifest=report.get('batch')
             if self.manifest:
                 cfg=mm.load(mm.CONFIG,mm.DEFAULT_SETTINGS);cfg['last_stage_manifest']=self.manifest;mm.save(mm.CONFIG,cfg)
-            self.stage_text.set('Stage: '+report['state']+' - '+str(report.get('stagedRoutes',0))+' replacements - report '+str(run))
+            self.stage_text.set('Stage: '+report['state']+' - '+str(report.get('selectedArchiveCount','?'))+' enabled archives, '+str(report.get('stagedForges',0))+' Forges, '+str(report.get('stagedRoutes',0))+' edits - report '+str(run))
             incomplete=report.get('incompleteMods',0)
             self.status.set(f'Stage has {incomplete} incomplete mods - review MOD_COVERAGE.txt' if incomplete else 'Stage ready for review' if self.manifest else 'Analysis complete - review the reports')
         self.task(work,done)

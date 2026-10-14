@@ -39,10 +39,12 @@ Scan & stage rebuilds from enabled archives, using ordered complete Forge founda
 
 ## Validation
 
-97 automated regression tests pass. The real-size fresh-install replay started with the six original Forge files matching the recorded Ubisoft-verified baseline in a private folder. The installer restored all six modded Forges and every runtime file; all 448 files matched the saved hashes. A second install changed zero Forges and zero runtime files. The live game was untouched during that replay.
+100 automated regression tests pass. The real-size fresh-install replay started with the six original Forge files matching the recorded Ubisoft-verified baseline in a private folder. The installer restored all six modded Forges and every runtime file; all 448 files matched the saved hashes. A second install changed zero Forges and zero runtime files. The live game was untouched during that replay.
 
 Evidence: `workspace/diagnostics/FRESH_INSTALL_REPLAY_20261014_024346/RESULT.json` and `workspace/saved_setup/DX11_COMPLETE_20261014_024812/FRESH_INSTALL_VALIDATION.json`. This proves file reproduction; the private copy was not launched as a separate game installation. The live source build was confirmed working by the user.
 
 The Essentials TEAMMATE parent normalization now rebuilds legacy packets with invalid checksums/trailing bytes only in a private workspace. All 3,804 extracted authored files matched the independent readback in the observed failure case. Strict packed-container verification remains enabled.
 
 Archive rebuild fixes on October 14: new authored .data packets with bad checksums are normalized privately, with complete extracted-file and metadata readback. The normal archive pipeline generates a runtime stage from the selected Native FPV package, numeric/key settings, official ReShade runtime, author preset/effects and selected sound package. Reviewed batch installation deploys Forges first, then these runtime files; a runtime failure rolls the Forge transaction back. ShaderToggler addon files remain a separate explicit choice because the confirmed FPV profile omits that addon.
+
+Single-mod diagnostic stages are private reports and cannot be installed. Use **Enabled mod selection / Scan & stage mods** to rebuild the full selected setup with your current settings. The archive list and Forge count appear in the stage summary. Clean originals are retained across partial installations through verified, linked backup receipts.

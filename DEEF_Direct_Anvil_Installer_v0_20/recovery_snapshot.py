@@ -62,6 +62,20 @@ def create_layered(manifest,installation,backups):
         row,receipt=chosen;source=Path(row['backup']).resolve()
         if not be.within(receipt.parent,source) or be.sha256(source)!=baseline['hashes'][target]:raise ValueError('Baseline recovery bytes changed')
         checked.append((target,entry,source))
+    # A partial install must retain originals for untouched modified Forges.
+    import layered_pipeline as lp
+    import mod_manager as mm
+    game=Path(state['plan']['gameRoot']).resolve();cfg=mm.load(mm.CONFIG,{})
+    history=lp.receipt_history(game,[str(txfile),cfg.get('last_transaction'),cfg.get('last_actual_transaction')]+[
+        row.get('previousTransaction') for row in state['outputs'].values()])
+    for target,digest in baseline['hashes'].items():
+        if target in state['outputs']:continue
+        live=be.sha256(target)
+        if live==digest:continue
+        row,receipt,source=lp.clean_history_entry(history,target,digest,live)
+        if row.get('installedSha256')!=live:
+            raise ValueError('Untouched Forge does not match its recorded installation: '+target)
+        checked.append((target,{'sourceSha256':digest,'stagedSha256':live},source))
     folder=Path(backups).resolve()/('RECOVERY_'+time.strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:6]);folder.mkdir(parents=True)
     recovery={'schema':1,'status':'INSTALLED','mode':'LAYERED_VERIFIED_RECOVERY','gameRoot':state['plan']['gameRoot'],
               'batchManifest':str(Path(manifest).resolve()),'files':[],'installed':[],'gameplayVerified':False}

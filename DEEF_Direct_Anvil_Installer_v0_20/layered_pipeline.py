@@ -79,27 +79,52 @@ def verified_diagnostic(path,game,target,digest,verify_files=False):
     return not verify_files or (be.sha256(candidate)==digest and be.sha256(backup)==rows[0]['originalSha256'])
 
 
+def receipt_history(game, seeds):
+    """Follow explicit receipt links, never search arbitrary backup directories."""
+    pending=list(seeds);seen=set();documents=[]
+    while pending:
+        path=Path(pending.pop(0) or '').resolve()
+        if path in seen:continue
+        if len(seen)>=256:raise ValueError('Backup receipt history exceeds supported depth')
+        seen.add(path)
+        if not be.within(policy.WORK.resolve(),path) or not path.is_file():continue
+        document=json.loads(path.read_text(encoding='utf-8'))
+        document_game=document.get('gameRoot',document.get('plan',{}).get('gameRoot'))
+        if document_game and Path(document_game).resolve()!=game:continue
+        if document.get('files'):documents.append((path,document))
+        pending.extend(document[k] for k in ('installationTransaction','originalTransaction','batchManifest') if document.get(k))
+        pending.extend(row['previousTransaction'] for row in document.get('outputs',{}).values() if row.get('previousTransaction'))
+    return documents
+
+
+def clean_history_entry(history,target,digest,live):
+    candidates=[]
+    for receipt,document in history:
+        matches=[row for row in document.get('files',[]) if row.get('target')==target and row.get('originalSha256')==digest]
+        if len(matches)>1:raise ValueError('Duplicate recovery target: '+target)
+        if matches:candidates.append((matches[0],receipt))
+    candidates.sort(key=lambda item:item[0].get('installedSha256')!=live)
+    for row,receipt in candidates:
+        backup=Path(row.get('backup','')).resolve()
+        if be.within(receipt.parent,backup) and backup.is_file() and be.sha256(backup)==digest:
+            return row,receipt,backup
+    raise ValueError('No verified original for modified Forge: '+target+'; verified baseline backup missing/changed')
+
+
 def baseline_sources(game,baseline,notify=lambda s:None):
-    """Use the official verified files, including saved originals of current mods."""
-    txfile=Path(mm.load(mm.CONFIG,{}).get('last_transaction',''))
-    tx=json.loads(txfile.read_text(encoding='utf-8')) if txfile.is_file() else {}
-    if tx and Path(tx.get('gameRoot','')).resolve()!=game:raise ValueError('Previous transaction belongs to another game')
-    entries={str(Path(e['target']).resolve()):e for e in tx.get('files',[])}
+    """Use clean originals from the bounded, explicitly linked install history."""
+    cfg=mm.load(mm.CONFIG,{})
+    history=receipt_history(game,[cfg.get('last_transaction'),cfg.get('last_actual_transaction')])
     sources={};previous={}
     for n,(target,digest) in enumerate(baseline['hashes'].items(),1):
         notify(f'Checking baseline source {n}/{len(baseline["hashes"])}: {Path(target).name}')
-        file=Path(target); live=be.sha256(file)
+        file=Path(target);live=be.sha256(file)
         if live==digest:sources[target]=file;continue
-        entry=entries.get(target)
-        if not entry or entry.get('originalSha256')!=digest:
-            raise ValueError('No verified original for modified Forge: '+target+'; restore the clean baseline before staging')
-        backup=Path(entry['backup']).resolve()
-        if not be.within(txfile.parent,backup) or not backup.is_file() or be.sha256(backup)!=digest:
-            raise ValueError('Verified baseline backup missing/changed: '+target)
+        entry,txfile,backup=clean_history_entry(history,target,digest,live)
         sources[target]=backup
-        previous[target]={'previousSha256':live,'previousTransaction':str(txfile.resolve())}
+        previous[target]={'previousSha256':live,'previousTransaction':str(txfile)}
         if entry.get('installedSha256')!=live:
-            diagnostic=mm.load(mm.CONFIG,{}).get('last_isolation_transaction','')
+            diagnostic=cfg.get('last_isolation_transaction','')
             if diagnostic and verified_diagnostic(diagnostic,game,target,live,verify_files=True):
                 previous[target]['previousDiagnosticTransaction']=str(Path(diagnostic).resolve())
             else:previous[target]['previousFoundationOnly']=True
@@ -251,7 +276,8 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
             inner=be.stage_plan_stream(plan,run/'resources',log=log,allow_route_exclusions=allow_subset,private_only=True)
             inner_path=run/'resources/BATCH_RESULT.json'
         final={'schema':3,'writer':WRITER,'status':'VERIFIED_STAGED','productVersion':policy.VERSION,
-               'baselineId':baseline['baselineId'],'installationOrder':list(PHASES),'foundationLayers':layers,
+               'baselineId':baseline['baselineId'],'buildScope':'ENABLED_MOD_SELECTION',
+               'selectedArchives':[key for key,mod in original_mods.items() if mod.get('enabled',True)],'installationOrder':list(PHASES),'foundationLayers':layers,
                'resourceManifest':str(inner_path) if inner_path else None,'runtimeManifest':runtime_receipt,
                'runtimeContributions':runtime_contributions,
                'presentPayloads':present,'installedPayloads':loose,
