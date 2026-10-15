@@ -40,9 +40,9 @@ def foundation_plan(mods,game,allow_subset=False,exclusions=None):
         backups=[m for m in members if not essentials and any('backup' in p.casefold() for p in m.replace('\\','/').split('/')[:-1])]
         exclusions.extend({'mod':key,'member':m,'reason':'ARCHIVED_BACKUP_NOT_INSTALL_PAYLOAD'} for m in backups)
         members=[m for m in members if m not in backups]
-        alternatives=[m for m in members if standalone and 'prepatch-ue-' in m.replace('\\','/').casefold()]
-        if alternatives and not allow_subset:raise ValueError('Precombined UE foundation competes with selected standalone Unlock Everything: '+key)
-        exclusions.extend({'mod':key,'member':m,'reason':'PRECOMBINED_ALTERNATIVE_TO_SELECTED_STANDALONE_UNLOCK'} for m in alternatives)
+        alternatives=[m for m in members if 'prepatch-ue-' in m.replace('\\','/').casefold()]
+        if alternatives and standalone and not allow_subset:raise ValueError('Precombined UE foundation competes with selected standalone Unlock Everything: '+key)
+        exclusions.extend({'mod':key,'member':m,'reason':'PRECOMBINED_ALTERNATIVE_TO_SELECTED_STANDALONE_UNLOCK' if standalone else 'UNLOCK_EVERYTHING_NOT_SELECTED'} for m in alternatives)
         members=[m for m in members if m not in alternatives]
         if not members:continue
         if mod.get('status')!='INDEXED':raise ValueError('Unreadable foundation archive: '+key)
@@ -293,6 +293,13 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
             final['finishedRoutes'].extend(translate(r) for r in inner['finishedRoutes'])
             final['excludedRoutes']=[translate(r) for r in inner.get('excludedRoutes',[])]
             targets.update(str(game/Path(k).name) for k in inner['outputs'])
+        # A removed archive must not leave behind an older whole-Forge mod.
+        # The private view already starts from verified originals, so include
+        # previously modified destinations even when no selected mod edits them.
+        final['baselineRestores']=sorted(set(previous)-targets)
+        for target in final['baselineRestores']:
+            log('Removed-mod cleanup: stage verified original '+Path(target).name)
+        targets.update(previous)
         for target in sorted(targets):
             virtual=str(view/Path(target).name)
             entry=inner['outputs'].get(virtual) if inner else None
@@ -414,6 +421,18 @@ def inspect_stage(manifest,expected_game=None,verify_backups=False):
         raise ValueError('Layered mod coverage changed or incomplete')
     if len(state['plan']['routes'])!=len(actual)+len(state.get('excludedRoutes',[])):raise ValueError('Invalid layered plan accounting')
     targets={r[2] for r in expected_routes}
+    restores=state.get('baselineRestores',[])
+    if not isinstance(restores,list) or len(restores)!=len(set(restores)) or targets.intersection(restores):
+        raise ValueError('Invalid removed-mod baseline restoration coverage')
+    if restores:
+        baseline=policy.require_ready(game)
+        for target in restores:
+            entry=state['outputs'].get(target,{})
+            original=baseline['hashes'].get(target)
+            receipt=Path(entry.get('previousTransaction','')).resolve()
+            if not original or entry.get('sourceSha256')!=original or entry.get('stagedSha256')!=original or not entry.get('previousSha256') or not be.within(policy.WORK.resolve(),receipt):
+                raise ValueError('Removed-mod restoration lacks a verified original and install history')
+        targets.update(restores)
     if set(state['outputs'])!=targets or set(state['plan']['sourceHashes'])!=targets:raise ValueError('Incomplete final Forge coverage')
     for target,entry in state['outputs'].items():
         staged=Path(entry['staged']).resolve()
@@ -461,7 +480,7 @@ def inspect_stage(manifest,expected_game=None,verify_backups=False):
         if not target.is_file() or be.sha256(target)!=item['payloadSha256']:raise ValueError('Separate installed payload changed: '+str(target))
         if verify_backups and be.sha256(archive)!=item['archiveSha256']:raise ValueError('Separate payload archive changed')
     return {'manifest':str(path),'gameRoot':str(game),'acceptedEdits':len(actual),'resourceEdits':resource_count,
-            'foundationSteps':len(layers),'excludedEdits':len(state.get('excludedRoutes',[])),
+            'foundationSteps':len(layers),'baselineRestores':len(restores),'excludedEdits':len(state.get('excludedRoutes',[])),
             'forges':[{'forge':Path(k).name,'stagedBytes':Path(v['staged']).stat().st_size} for k,v in state['outputs'].items()]}
 
 
