@@ -46,7 +46,9 @@ class AuthorReader:
     def read(self,path,required_fields=None):
         path=Path(path);data=path.read_bytes()
         if len(data)<100 or path.suffix.lower()!='.gr_weapondbentry':raise ValueError('Unsupported weapon definition')
-        ctx=types.SimpleNamespace(offset=14,fileu64=int.from_bytes(data[1:9],'little'),filename=path.name)
+        identity=int.from_bytes(data[1:9],'little')
+        name=getattr(self,'canonical_names',{}).get(identity,path.name)
+        ctx=types.SimpleNamespace(offset=14,fileu64=identity,filename=name)
         fields={};anchors=[]
         required=FIELDS if required_fields is None else set(required_fields)
         if not required or not required<=FIELDS:raise ValueError('Unsupported requested weapon fields')
@@ -142,3 +144,9 @@ def edit_fields(reader, base, values, output):
     except Exception:
         output.unlink(missing_ok=True);raise
     return {'verified':True,'allOtherBytesPreserved':True,'originalSha256':layout['sha256'],'outputSha256':after['sha256'],'changes':changes,'readerSha256':reader.sha}
+
+
+class FieldReader:
+    """Read only the explicitly requested author fields."""
+    def __init__(self,reader,fields):self.reader=reader;self.sha=reader.sha;self.fields=set(fields)
+    def read(self,path):return self.reader.read(path,required_fields=self.fields)

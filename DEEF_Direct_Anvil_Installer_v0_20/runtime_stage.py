@@ -8,7 +8,9 @@ def prepare(mods,game,run,notify=print):
     game=Path(game).resolve();folder=Path(run)/'Runtime';cfg=mm.load(mm.CONFIG,{})
     plan=[];contributions={}
     if cfg.get('native_package'):
-        plan.extend(ci.native_plan(cfg['native_package'],game,cfg.get('native_preset_choices'),cfg.get('native_chain_proxy',False),cfg.get('native_numeric'),toggle_key=cfg.get('native_toggle_key'),graphics_compatibility=cfg.get('native_graphics_compatibility',False),dx11_single_loader=cfg.get('native_dx11_single_loader',True)))
+        choices=dict(cfg.get('native_preset_choices') or ci.PRESETS)
+        if cfg.get('preserve_game_sensitivity',False):choices['adsfov']='vanilla'
+        plan.extend(ci.native_plan(cfg['native_package'],game,choices,cfg.get('native_chain_proxy',False),cfg.get('native_numeric'),toggle_key=cfg.get('native_toggle_key'),graphics_compatibility=cfg.get('native_graphics_compatibility',False),dx11_single_loader=cfg.get('native_dx11_single_loader',True)))
         main=next(r for r in plan if Path(r['target']).name=='NativeFirstPerson.ini')
         text,encoding=ci.read_ini(main['source']);text=main.get('content',text);values={}
         for row in plan:
@@ -16,6 +18,7 @@ def prepare(mods,game,run,notify=print):
             parser=configparser.ConfigParser(interpolation=None,strict=False);parser.optionxform=str
             parser.read_string(row.get('content') or ci.read_ini(row['source'])[0])
             if parser.has_section('FirstPerson'):values.update(dict(parser.items('FirstPerson')))
+        if cfg.get('preserve_game_sensitivity',False):values['ADSFOV']='0'
         main.update(content=ci.patch_ini_values(text,'FirstPerson',values),encoding=encoding)
     if cfg.get('reshade_setup'):
         import reshade_install as rs
@@ -32,6 +35,20 @@ def prepare(mods,game,run,notify=print):
             source=mm.extraction_target(mod['archive'],member,archive_hash=be.sha256(mod['archive']))
             target=game/'sounddata/pc'/Path(member).name
             plan.append(dict(source=str(source),target=str(target)));contributions[str(target)]={'mod':key,'member':member}
+    # Disabled shader addons must not survive an earlier/manual installation.
+    if not cfg.get('enable_shader_toggler_addon',False):
+        planned={Path(row['target']).resolve() for row in plan}
+        for name in ('ShaderToggler.addon64','ShaderToggler.ini'):
+            target=game/name
+            if target.is_file() and target not in planned:
+                plan.append(dict(target=str(target),remove=True,expectedSha256=be.sha256(target)))
+    # Keep ReShade's overlay key separate from the user's FPV toggle.
+    if str(cfg.get('native_toggle_key','')).casefold()=='home':
+        for row in plan:
+            if Path(row['target']).name=='ReShade.ini' and not row.get('remove'):
+                if 'content' in row:text,encoding=row['content'],row.get('encoding','utf-8')
+                else:text,encoding=ci.read_ini(row['source'])
+                row.update(content=ci.patch_ini_values(text,'INPUT',{'KeyOverlay':'36,0,1,0'}),encoding=encoding)
     rows=[];seen=set()
     for item in plan:
         target=Path(item['target']).resolve()

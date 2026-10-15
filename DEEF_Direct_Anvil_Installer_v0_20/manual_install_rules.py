@@ -48,6 +48,8 @@ def excluded_variant(archive,member):
     import mod_manager
     cfg=mod_manager.load(mod_manager.CONFIG,{})
     folder='/'+member.replace('\\','/').strip('/').casefold()
+    if '-1807-' in name and '/'+('FDE' if cfg.get('bcm_handguard','Black')=='Black' else 'Black').casefold()+' handguard/' in folder:
+        return 'Selected BCM handguard: '+cfg.get('bcm_handguard','Black')
     if ('-1159-' in name or '-489-' in name) and cfg.get('thermal_priority')=='Standard night vision and thermal':
         return 'User selected standard night vision and thermal; vision replacement/disable files are alternatives'
     if '-1159-' in name and logical=='dbperklih_nightvision.dbperk' and cfg.get('preserve_night_vision',True):
@@ -56,13 +58,20 @@ def excluded_variant(archive,member):
         return 'Superseded by the selected author No ADS Zoom Updated package'
     if '-489-' in name and cfg.get('thermal_priority')=='Pathfinder white thermal vision':
         return 'User selected Pathfinder white thermal instead of disabling thermal'
+    if name.startswith('various tweaks-537-') and '/item wheel swap/' in folder:
+        import deployment_policy
+        held='Item wheel swap/Syringe and Binoculars/Put in 0_-_Game Bootstrap Settings.data/1_-_DBItemSetting_HealingItemEssence_Bandages.DBToolSetting'
+        if deployment_policy.held_route(archive,held):return 'Coupled item-wheel group held: never install only its syringe replacement'
+    if '-537-' in name and '/single trigger for npc/' in folder and cfg.get('npc_trigger_priority')=='Vanilla automatic fire':
+        return 'Vanilla automatic-fire profile replaces the coupled NPC/vehicle trigger changes'
+    if '-537-' in name and '/single trigger for npc/' in folder and cfg.get('preserve_player_automatic_fire',True) and logical.endswith('.triggerattachmentdbentry'):
+        return 'Shared trigger definition preserved for player and vehicle automatic fire'
     if '-537-' in name and '/item wheel swap/' in folder and cfg.get('item_wheel_variant'):
         choice='/'+cfg['item_wheel_variant'].casefold()+'/'
         if choice not in folder:return 'User selected item wheel: '+cfg['item_wheel_variant']
     if '-1585-' in name and cfg.get('wabo_difficulty'):
-        parts=member.replace('\\','/').split('/')
-        if len(parts)>1 and parts[1] not in ('0_Required for all',cfg['wabo_difficulty']):
-            return 'User selected WABO '+cfg['wabo_difficulty']+' and common required files; other difficulty/custom options are alternatives'
+        from gameplay_options import wabo_variant
+        return wabo_variant(member,cfg)
     if not ('-1102-' in name and ('nightmare' in name or 'fear' in name)):return None
     if logical not in {'sc_tgt_caller.dbsoldierconfig','sc_tgt_caller_raid.dbsoldierconfig'}:return None
     priority=mod_manager.load(mod_manager.CONFIG,{}).get('nightmare_caller_priority','New Reinforcements')

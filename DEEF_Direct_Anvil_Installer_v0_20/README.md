@@ -33,13 +33,13 @@ Every changed Forge and runtime file is backed up before replacement. The instal
 
 ## Change or rebuild mods
 
-The First person & ReShade page provides separate configuration installers. Numerical camera/FOV values and the toggle key are editable. Merge options offers Author values or 200 for player shotgun damage, and the existing gameplay conflict choices.
+The First person & ReShade page provides separate configuration installers. Numerical camera/FOV values and the toggle key are editable. Merge options offers Author values or 100/125/150/175/200 for player shotgun damage, and the existing gameplay conflict choices.
 
 Scan & stage rebuilds from enabled archives, using ordered complete Forge foundations, authored assets and verified compatibility merges. Newly added archives go through the same scan and composition process. The saved complete setup is a separate recovery shortcut. Keep AnvilToolkit in its original complete folder or a complete clone for rebuilding; its executable cannot be used alone. Private composition diagnostics and older trial batches are not the saved-setup restore source.
 
 ## Validation
 
-100 automated regression tests pass. The real-size fresh-install replay started with the six original Forge files matching the recorded Ubisoft-verified baseline in a private folder. The installer restored all six modded Forges and every runtime file; all 448 files matched the saved hashes. A second install changed zero Forges and zero runtime files. The live game was untouched during that replay.
+113 automated regression tests pass. The real-size fresh-install replay started with the six original Forge files matching the recorded Ubisoft-verified baseline in a private folder. The installer restored all six modded Forges and every runtime file; all 448 files matched the saved hashes. A second install changed zero Forges and zero runtime files. The live game was untouched during that replay.
 
 Evidence: `workspace/diagnostics/FRESH_INSTALL_REPLAY_20261014_024346/RESULT.json` and `workspace/saved_setup/DX11_COMPLETE_20261014_024812/FRESH_INSTALL_VALIDATION.json`. This proves file reproduction; the private copy was not launched as a separate game installation. The live source build was confirmed working by the user.
 
@@ -48,3 +48,5 @@ The Essentials TEAMMATE parent normalization now rebuilds legacy packets with in
 Archive rebuild fixes on October 14: new authored .data packets with bad checksums are normalized privately, with complete extracted-file and metadata readback. The normal archive pipeline generates a runtime stage from the selected Native FPV package, numeric/key settings, official ReShade runtime, author preset/effects and selected sound package. Reviewed batch installation deploys Forges first, then these runtime files; a runtime failure rolls the Forge transaction back. ShaderToggler addon files remain a separate explicit choice because the confirmed FPV profile omits that addon.
 
 Single-mod diagnostic stages are private reports and cannot be installed. Use **Enabled mod selection / Scan & stage mods** to rebuild the full selected setup with your current settings. The archive list and Forge count appear in the stage summary. Clean originals are retained across partial installations through verified, linked backup receipts.
+
+Gameplay merge controls now offer 100/125/150/175/200 player shotgun damage, vanilla ammo reserves (including the vanilla max-ammo perk), and the author's vanilla-like suppressor preset independently of WABO difficulty. The Game settings sensitivity profile preserves vanilla weapon ADS sensitivity and input filters and lets Breakpoint control optic FOV. Shared vehicle/player automatic triggers and normal finite-count syringes are restored from verified vanilla objects. Coupled, incompatible wheel swaps cannot be partially applied. Vanilla concealment restores the original bush/perception/visual-detection definitions; this does not establish that every plant blocks line of sight, which still requires gameplay validation. Runtime packages are staged even when already installed, so fresh installs and reinstalls receive the same sound payload. FPV Home moves the ReShade overlay to Shift+Home. These changes apply through a newly generated stage; no live game test is claimed for this revision.

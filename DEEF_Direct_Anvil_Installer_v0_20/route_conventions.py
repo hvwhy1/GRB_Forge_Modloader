@@ -35,15 +35,33 @@ def normalize_route(route):
     return result
 
 
+FORGE_FOLDER_ALIASES={
+    'datapcpatch01':'DataPC_patch_01.forge','patch01':'DataPC_patch_01.forge',
+    'datapcextrapatch01':'DataPC_extra_patch_01.forge','extrapatch01':'DataPC_extra_patch_01.forge',
+    'datapcresourcespatch01':'DataPC_Resources_patch_01.forge','resourcespatch01':'DataPC_Resources_patch_01.forge',
+    'datapcresources':'DataPC_Resources.forge','datapcextra':'DataPC_extra.forge'}
+
+def forge_folder_label(name):
+    token=re.sub(r'[^a-z0-9]','',name.casefold().removesuffix('.forge'))
+    if token in FORGE_FOLDER_ALIASES:return FORGE_FOLDER_ALIASES[token]
+    if LEGACY_FORGE.fullmatch(name):return name+'.forge'
+    return name if name.casefold().endswith('.forge') else None
+
+
 def parse_explicit_parent(member):
     """Locate the declared Forge/data/object path inside optional folder nesting."""
     parts=[p for p in str(member).replace('\\','/').split('/') if p]
     for i, name in enumerate(parts):
-        is_legacy=bool(LEGACY_FORGE.fullmatch(name))
-        if not (name.casefold().endswith('.forge') or is_legacy):continue
-        forge_name=name+'.forge' if is_legacy else name
+        forge_name=forge_folder_label(name)
+        if not forge_name:continue
+        is_legacy=not name.casefold().endswith('.forge')
         rest=[p for p in parts[i+1:] if p.casefold()!='extracted']
         if not rest:continue
+        if rest[0].casefold()=='dbcontainer' and len(rest)==2:
+            rest=['DBContainerEntry_0X104634F921.data',rest[1]]
+        positions=[j for j,value in enumerate(rest) if DATA_PATTERN.fullmatch(parent_data_label(value)[0])]
+        if positions and len(rest)-positions[0] in (1,2):
+            rest=rest[positions[0]:]
         data, _ = parent_data_label(rest[0])
         if not DATA_PATTERN.fullmatch(data):continue
         if len(rest) not in (1,2):continue

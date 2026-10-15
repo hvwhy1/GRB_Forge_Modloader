@@ -85,7 +85,7 @@ def verified_loose(mods,game):
     return rows
 
 
-def merge_weapons(items,run,config):
+def merge_weapons(items,run,config,stock=None):
     from weapon_stats_merge import AuthorReader,merge,FIELDS
     reader=AuthorReader(config['wabo_compatibility_tool'])
     grouped=defaultdict(list);others=[];proofs=[]
@@ -122,6 +122,9 @@ def merge_weapons(items,run,config):
             merged=dict(base,payload=str(out))
         merged['contributions']=[(i['mod'],i['member']) for i in group];others.append(merged)
         merged['donorArchives']=[i['archive'] for i in group]
+    if stock and config.get('preserve_game_sensitivity',True):
+        from baseline_gameplay import restore_sensitivity
+        restore_sensitivity(reader,others,stock,run)
     if config.get('lmg_accuracy_profile')=='Precision':
         from weapon_stats_merge import edit_fields
         precision=[]
@@ -134,24 +137,31 @@ def merge_weapons(items,run,config):
             proof=edit_fields(reader,payload(item),{'spreadpattern':reader.db.spreadpattern['SNR_HTI'],'sway':0.2},out)
             item['payload']=str(out);precision.append(dict(name=item['name'],**proof))
         be.record_json(run/'LMG_PRECISION.json',precision)
-    if config.get('shotgun_damage_profile')=='200':
+    if config.get('shotgun_damage_profile') in ('100','125','150','175','200'):
         from shotgun_override import player_shotgun,apply
         shotgun=[]
         for item in others:
             if not player_shotgun(item['name']):continue
             out=run/'ShotgunDamage'/item['name']
-            proof=apply(reader,payload(item),out)
+            proof=apply(reader,payload(item),out,int(config['shotgun_damage_profile']))
             item['payload']=str(out);shotgun.append(dict(name=item['name'],**proof))
         be.record_json(run/'SHOTGUN_DAMAGE.json',shotgun)
     be.record_json(run/'WEAPON_MERGES.json',proofs)
     return others
 
 
-def prepare(mods,view,game,toolkit,run,current,log):
+def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None):
     cfg=mm.load(mm.CONFIG,{})
     if not cfg.get('complete_content_pipeline'):return mods,[]
+    be.record_json(Path(run)/'GAMEPLAY_SETTINGS.json',{key:cfg.get(key) for key in ('wabo_difficulty','weapon_damage_priority','shotgun_damage_profile','lmg_accuracy_profile','ammo_capacity_profile','suppressor_profile','preserve_game_sensitivity','preserve_player_automatic_fire','npc_trigger_priority','foliage_profile','item_wheel_variant')})
     outer,inner=inventory(mods);updated=copy.deepcopy(mods);layers=[]
     dll=be.build_bridge(toolkit,log)
+    stock={}
+    dbkey=('DataPC_patch_01.forge','dbcontainerentry_0x104634f921.data')
+    if baseline_sources:
+        from baseline_gameplay import prepare as prepare_vanilla
+        inner[dbkey],stock=prepare_vanilla(inner.get(dbkey,[]),baseline_sources,toolkit,run,cfg,log)
+        updated['Installer gameplay options']={'members':[], 'enabled':False}
     archive_hashes={}
     seq=0
     def compose(forge,items,parent=None):
@@ -212,7 +222,7 @@ def prepare(mods,view,game,toolkit,run,current,log):
             pass # Keep separate Forge destinations; author package layout matters.
         compose(forge,items)
     for (forge,data),items in sorted(inner.items()):
-        if 'dbcontainerentry' in data:items=merge_weapons(items,run,cfg)
+        if 'dbcontainerentry' in data:items=merge_weapons(items,run,cfg,stock)
         index=forge_audit.read_index(view/forge)
         matches=[e for e in index['entries'] if logical(e['name']+'.data')==data]
         if len(matches)!=1:raise ValueError('Complete inner parent unresolved: '+forge+'/'+data)
@@ -234,7 +244,7 @@ def prepare(mods,view,game,toolkit,run,current,log):
             present.append({'mod':key,'member':member,'forge':str(game/forge),'id':entry['id'],'type':0,'payloadSha256':desired,'archive':mod['archive'],'archiveSha256':be.sha256(mod['archive'])})
             updated[key]['members'].remove(member)
     be.record_json(run/'PRESENT_PAYLOADS.json',present)
-    loose=verified_loose(mods,game)
+    loose=[] # Runtime payloads must be staged from packages even when already installed.
     for row in loose:updated[row['mod']]['members'].remove(row['member'])
     be.record_json(run/'LOOSE_PAYLOADS.json',loose)
     return updated,layers

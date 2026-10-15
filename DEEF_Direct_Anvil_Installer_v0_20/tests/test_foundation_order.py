@@ -84,6 +84,7 @@ class LayeredBuildTests(unittest.TestCase):
                 self.assertEqual((view/forge.name).read_bytes(),b'UNLOCK')
                 route={'kind':'inner','forge':str(view/forge.name),'data':'0_-_Container.data','object':'0_-_Object.Type','member':'edit.bin','sourceArchive':selected[resource.name]['archive']}
                 mapped=copy.deepcopy(selected);mapped[resource.name]['routes']=[route]
+                mapped['Installer gameplay options']={'enabled':False,'members':[],'routes':[]}
                 run_dir.mkdir();report=run_dir/'AUTO_CHARACTERIZATION.json';be.record_json(report,{})
                 return mapped,{'verifiedCount':1,'blockingUnmappedCount':0},report
             def stage(plan,out,**kwargs):

@@ -11,6 +11,6 @@ def player_shotgun(name):
             and not any(token in name for token in ('_npc', '_ia.', '_ia_', 'prog_test', 'silverback')))
 
 
-def apply(reader,base,output):
+def apply(reader,base,output,value=200):
     if not player_shotgun(base):raise ValueError('Not a player shotgun')
-    return edit_damage(reader,base,200,output)
+    return edit_damage(reader,base,value,output)

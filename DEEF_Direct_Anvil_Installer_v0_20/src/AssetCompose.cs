@@ -42,7 +42,12 @@ internal static class AssetCompose {
                 if(candidates.Length==1) {
                     var c=candidates[0];baseForge=c.forge;
                     string clean=Path.GetFileName(item.name);int split=clean.IndexOf("_-_",StringComparison.Ordinal);if(split>0&&clean[..split].All(char.IsDigit))clean=clean[(split+3)..];
-                    if(!clean.Equals(c.entry.Name+".data",StringComparison.OrdinalIgnoreCase))throw new IOException("CONTAINER_ID_NAME_MISMATCH: "+item.name+" vs "+c.entry.Name);
+                    // A delivered filename can be an author alias (for example MPX_LOD0
+                    // versus the original SigMPX name). The unique binary ID AND
+                    // type above select the parent. WholeDataMerge checks that root
+                    // identity again and reads back every original and supplied object.
+                    if(!clean.Equals(c.entry.Name+".data",StringComparison.OrdinalIgnoreCase))
+                        rows.Add(new{name=item.name,state="ROOT_FILENAME_ALIAS_UNIQUE_ID_TYPE_VERIFIED",identity=meta.ID.ToString("X16"),type=meta.Extension,originalName=c.entry.Name});
                     string dir=Path.Combine(work,seen.Count.ToString());Directory.CreateDirectory(dir);string original=Path.Combine(dir,c.entry.Ordinal+"_-_"+c.entry.Name+".data");
                     using(var input=File.OpenRead(c.forge))using(var copy=File.Create(original))ForgeStream.CopyRange(input,copy,c.entry.Offset,c.entry.Length);
                     selected=WholeDataMerge.Prepare(original,payload,Path.Combine(dir,"Merged"),true);

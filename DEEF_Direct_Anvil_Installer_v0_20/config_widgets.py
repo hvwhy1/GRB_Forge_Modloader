@@ -73,7 +73,7 @@ def native_panel(parent,owner):
     ttk.Checkbutton(body,text='Chain a foreign d3d11.dll wrapper (DXGI ReShade stays separate)',variable=chain).grid(row=13,column=0,columnspan=2,sticky='w',pady=6)
     graphics=tk.BooleanVar(value=cfg.get('native_graphics_compatibility',False))
     ttk.Checkbutton(body,text='Graphics compatibility: keep game blur instead of FPV suppression',variable=graphics).grid(row=14,column=0,columnspan=2,sticky='w',pady=6)
-    ttk.Label(body,text='Type FOV 70-140; ADS FOV 0 (vanilla) or 20-140; forward offset 0-0.45 m; near clip 0.001-0.1 m. Graphics compatibility leaves the game blur behavior unchanged while retaining FPV camera controls. Close the game before installing. Existing files are backed up.',wraplength=760).grid(row=15,column=0,columnspan=2,sticky='w',pady=6)
+    ttk.Label(body,text='Type FOV 70-140; ADS FOV 0 (vanilla) or 20-140; forward offset 0-0.45 m; near clip 0.001-0.1 m. Game settings in Merge options preserves the game optic FOV instead of the ADS FOV override. Graphics compatibility leaves the game blur behavior unchanged while retaining FPV camera controls. Close the game before installing. Existing files are backed up.',wraplength=760).grid(row=15,column=0,columnspan=2,sticky='w',pady=6)
     def install():
         package=source.get();selected={k:v.get() for k,v in choices.items()};game=owner.paths['game_root'].get();backup=owner.paths['backup_root'].get();chaining=chain.get()
         numbers={k:v.get() for k,v in numeric.items()}
@@ -81,7 +81,9 @@ def native_panel(parent,owner):
         compat=graphics.get()
         cfg=mm.load(mm.CONFIG,{});cfg.update(native_package=package,native_preset_choices=selected,native_chain_proxy=chaining,native_numeric=numbers,native_toggle_key=key,native_graphics_compatibility=compat);mm.save(mm.CONFIG,cfg)
         single=cfg.get('native_dx11_single_loader',False)
-        def work():return ci.install_files(ci.native_plan(package,game,selected,chaining,numbers,toggle_key=key,graphics_compatibility=compat,dx11_single_loader=single),game,backup)
+        effective=dict(selected)
+        if cfg.get('preserve_game_sensitivity',False):effective['adsfov']='vanilla'
+        def work():return ci.install_files(ci.native_plan(package,game,effective,chaining,numbers,toggle_key=key,graphics_compatibility=compat,dx11_single_loader=single),game,backup)
         def done(receipt):
             cfg=mm.load(mm.CONFIG,{});cfg['last_config_transaction']=str(receipt);mm.save(mm.CONFIG,cfg)
             owner.status.set('Native First Person installed - '+str(receipt))
@@ -211,27 +213,41 @@ def reshade_panel(parent,owner):
 
 
 def merge_panel(parent,owner):
-    frame=ttk.Frame(parent,padding=14);frame.pack(fill='both',expand=True);frame.columnconfigure(1,weight=1)
+    container=ttk.Frame(parent);container.pack(fill='both',expand=True)
+    fixed=ttk.Frame(container,padding=(14,8));fixed.pack(fill='x')
+    canvas=tk.Canvas(container,bg='#111827',highlightthickness=0)
+    scroll=ttk.Scrollbar(container,orient='vertical',command=canvas.yview)
+    scroll.pack(side='right',fill='y');canvas.pack(fill='both',expand=True);canvas.configure(yscrollcommand=scroll.set)
+    frame=ttk.Frame(canvas,padding=14);window=canvas.create_window((0,0),window=frame,anchor='nw');frame.columnconfigure(1,weight=1)
+    frame.bind('<Configure>',lambda _:canvas.configure(scrollregion=canvas.bbox('all')))
+    canvas.bind('<Configure>',lambda event:canvas.itemconfigure(window,width=event.width))
     cfg=mm.load(mm.CONFIG,{})
     options=[('weapon_damage_priority','Weapon damage in merged files',['Damage Balance','WABO'],'Damage Balance'),
         ('wabo_difficulty','WABO difficulty',['1_Easy','2_Normal','3_Hard','4_Realistic (Hardcore)'],'4_Realistic (Hardcore)'),
         ('thermal_priority','Thermal vision',['Standard night vision and thermal','Pathfinder white thermal vision','Disable thermal vision'],'Standard night vision and thermal'),
-        ('item_wheel_variant','Item wheel',['Syringe and Binoculars','Syringe and Breaching torch'],'Syringe and Binoculars'),
+        ('item_wheel_variant','Item wheel',['Vanilla item wheel','Syringe and Binoculars','Syringe and Breaching torch'],'Vanilla item wheel'),
         ('nightmare_caller_priority','Nightmare caller resources',['New Reinforcements','Traffic Improvements'],'New Reinforcements'),
+        ('preserve_game_sensitivity','Sensitivity / optic FOV',['Game settings','Mod settings'],'Game settings'),
+        ('foliage_profile','Enemy vision / concealment',['Mod settings','Vanilla concealment'],'Vanilla concealment'),
+        ('npc_trigger_priority','Vehicle / NPC trigger rules',['Vanilla automatic fire','Various Tweaks single trigger'],'Vanilla automatic fire'),
+        ('bcm_handguard','BCM Koblin handguard',['Black','FDE'],'Black'),
+        ('ammo_capacity_profile','Ammo reserve',['Difficulty preset','Vanilla'],'Vanilla'),
+        ('suppressor_profile','Suppressed detection',['Difficulty preset','Vanilla-like'],'Vanilla-like'),
         ('lmg_accuracy_profile','LMG firing accuracy',['Original','Precision'],'Original'),
-        ('shotgun_damage_profile','Player shotgun damage',['Author values','200'],'Author values')]
+        ('shotgun_damage_profile','Player shotgun damage',['Author values','100','125','150','175','200'],'150')]
     controls={}
     ttk.Label(frame,text='Merge priorities for future builds',font=('Segoe UI Semibold',14)).grid(row=0,column=0,columnspan=2,sticky='w',pady=(0,14))
     for row,(key,label,values,default) in enumerate(options,1):
-        controls[key]=tk.StringVar(value=cfg.get(key,default))
+        controls[key]=tk.StringVar(value=('Game settings' if cfg.get(key,True) else 'Mod settings') if key=='preserve_game_sensitivity' else cfg.get(key,default))
         ttk.Label(frame,text=label).grid(row=row,column=0,sticky='w',padx=(0,12),pady=8)
         ttk.Combobox(frame,textvariable=controls[key],values=values,state='readonly',width=35).grid(row=row,column=1,sticky='ew',pady=8)
     controls['preserve_night_vision']=tk.BooleanVar(value=cfg.get('preserve_night_vision',True))
     ttk.Checkbutton(frame,text='Keep normal night vision alongside white-hot vision',variable=controls['preserve_night_vision']).grid(row=len(options)+1,column=0,columnspan=2,sticky='w',pady=8)
     def save():
-        config=mm.load(mm.CONFIG,{});config.update({k:v.get() for k,v in controls.items()});mm.save(mm.CONFIG,config)
+        config=mm.load(mm.CONFIG,{});config.update({k:v.get() for k,v in controls.items()});config['preserve_game_sensitivity']=controls['preserve_game_sensitivity'].get()=='Game settings';mm.save(mm.CONFIG,config)
         owner.status.set('Merge choices saved - scan and stage a new build to apply them')
-    owner.button(frame,'Save merge options',save,True).grid(row=len(options)+2,column=0,columnspan=2,sticky='w',pady=16)
+    owner.button(fixed,'Save merge options',save,True).pack(side='left')
+    ttk.Label(fixed,text='Save, then scan and stage to apply these choices.').pack(side='left',padx=12)
     ttk.Label(frame,text='White-hot vision: after installation, switch to Pathfinder once and activate its vision, then switch back to your preferred class. The author recommends this if white-hot does not appear. The white-hot-only files disable ordinary thermal and, unless checked above, green night vision.',wraplength=740).grid(row=len(options)+3,column=0,columnspan=2,sticky='w',pady=8)
-    ttk.Label(frame,text='Damage Balance preserves its damage values while WABO supplies ballistics and handling. Precision LMGs use the existing HTI spread pattern and sway 0.2, preserving recoil, damage, models and attachments. The unsupported T95 bivouac definition is preserved. Saved choices affect a new scan/stage, not an already installed or staged build.',wraplength=740).grid(row=len(options)+4,column=0,columnspan=2,sticky='w',pady=8)
+    ttk.Label(frame,text='Damage Balance preserves its damage values while WABO supplies ballistics and handling. Precision LMGs use the existing HTI spread pattern and sway 0.2, preserving recoil, damage, models and attachments. The unsupported T95 bivouac definition is preserved. Vanilla ammo/suppressors use the author optional presets without changing Hardcore health. Vanilla concealment restores the original vision and bush definitions; gameplay still determines which foliage occludes sight. Incompatible wheel swaps are held as a complete group. Saved choices affect a new scan/stage, not an already installed or staged build.',wraplength=740).grid(row=len(options)+4,column=0,columnspan=2,sticky='w',pady=8)
     return controls

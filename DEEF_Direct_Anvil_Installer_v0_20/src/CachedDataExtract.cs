@@ -21,11 +21,13 @@ internal static class CachedDataExtract {
             var matches=data.FilesByID.Values.Where(f=>f.Name.Equals(name,StringComparison.OrdinalIgnoreCase)).ToArray();
             if(matches.Length!=1)throw new IOException("Selected name absent or ambiguous: "+name);
             var item=matches[0];string extension=HashedData.HashedStrings.TryGetValue(item.Type,out var type)?type:item.Type.ToString();
-            string file=Path.Combine(output,"1_-_"+name+"."+extension);if(File.Exists(file))throw new IOException("Selected output already exists");
+            string label=args[0]=="cached-extract-short" ? item.ID.ToString("X16")+(extension=="GR_WeaponDBEntry"?".GR_WeaponDBEntry":".bin") : "1_-_"+name+"."+extension;
+            string file=Path.Combine(output,label);if(File.Exists(file))throw new IOException("Selected output already exists");
             File.WriteAllBytes(file,item.Data);rows.Add(new{name,id=item.ID.ToString("X16"),type=item.Type,file,sha256=Trial.Hash(file)});
         }
         if(before!=Trial.Hash(source))throw new IOException("Source changed during read-only extraction");
-        File.WriteAllText(Path.Combine(output,"READ_ONLY_EXTRACTION.json"),JsonSerializer.Serialize(new{source,sourceSha256=before,sourceUnchanged=true,rows},new JsonSerializerOptions{WriteIndented=true}));
+        var available=data.FilesByID.Values.Select(f=>new{name=f.Name,id=f.ID.ToString("X16"),type=f.Type,extension=HashedData.HashedStrings.TryGetValue(f.Type,out var ext)?ext:f.Type.ToString()}).OrderBy(f=>f.name).ToArray();
+        File.WriteAllText(Path.Combine(output,"READ_ONLY_EXTRACTION.json"),JsonSerializer.Serialize(new{source,sourceSha256=before,sourceUnchanged=true,rows,available},new JsonSerializerOptions{WriteIndented=true}));
         Console.WriteLine($"Cached extraction: {rows.Count} selected objects from {data.FilesByID.Count}");return 0;
     }
 }

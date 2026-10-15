@@ -224,7 +224,8 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
         layers.extend(guided_layers)
         for layer in guided_layers:archives[layer['archive']]=layer['archiveSha256']
         import complete_content
-        mods,content_layers=complete_content.prepare(mods,view,game,toolkit,run,current,log)
+        runtime_mods=copy.deepcopy(mods)
+        mods,content_layers=complete_content.prepare(mods,view,game,toolkit,run,current,log,baseline_sources=sources)
         layers.extend(content_layers)
         for layer in content_layers:archives.update(layer['sourceArchives'])
         be.record_json(run/'INSTALL_ORDER.json',{'phases':list(PHASES),'layers':layers,
@@ -236,7 +237,7 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
         # mixed archives eligible for resource mapping.
         resources=copy.deepcopy(mods)
         import runtime_stage
-        runtime_receipt,runtime_contributions=runtime_stage.prepare(mods,game,run,log)
+        runtime_receipt,runtime_contributions=runtime_stage.prepare(runtime_mods,game,run,log)
         for key,mod in resources.items():
             mod['members']=[m for m in mod['members'] if not m.lower().endswith('.forge')]
             covered={r['member'] for r in runtime_contributions if r['mod']==key}
@@ -261,6 +262,7 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
         # Preserve library enable flags and expose direct replacement routes.
         saved=copy.deepcopy(original_mods)
         for key,item in mapped.items():
+            if key=='Installer gameplay options':continue
             saved[key]['routes']=item.get('routes',[])
         for row in foundations:
             saved[row['mod']].setdefault('routes',[]).append(dict(row,sourceArchive=row['archive']))
