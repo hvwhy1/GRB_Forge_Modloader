@@ -7,11 +7,11 @@ import mod_manager as mm
 import conflict_policy as cp
 
 
-def show(parent,owner):
+def show(parent,owner,*,report_path=None,on_saved=None,on_cancel=None,resume=False):
  cfg=mm.load(mm.CONFIG,{});policy=copy.deepcopy(cp.settings(cfg));mods=mm.load(mm.STATE,{})
  active=sorted(k for k,v in mods.items() if v.get('enabled',True))
  order=[k for k in policy.get('mod_order',[]) if k in active]+[k for k in active if k not in policy.get('mod_order',[])]
- win=tk.Toplevel(parent);win.title('Conflict priorities and table merges');win.geometry('1060x760');win.minsize(820,600)
+ win=tk.Toplevel(parent);win.title('Forge Assembly - Conflict priorities');win.geometry('1060x760');win.minsize(820,600)
  top=ttk.Frame(win,padding=12);top.pack(fill='x')
  ttk.Label(top,text='Choices apply to the next Scan & stage. Higher entries win unresolved object conflicts; compatible objects and validated fields are merged first.',wraplength=970).pack(anchor='w')
  book=ttk.Notebook(win);book.pack(fill='both',expand=True,padx=12,pady=8)
@@ -41,8 +41,11 @@ def show(parent,owner):
  ttk.Label(fields,text='Vanilla sensitivity, shotgun damage and LMG precision controls are applied after these field merges. Unknown binary fields are never guessed.',wraplength=960).grid(row=len(cp.FIELD_GROUPS)+1,column=0,columnspan=2,sticky='w',pady=12)
  reports=[];runs=mm.WORK/'auto_runs'
  if runs.is_dir():reports=[p/'CONFLICT_POLICY_REPORT.json' for p in runs.iterdir() if p.is_dir() and (p/'CONFLICT_POLICY_REPORT.json').is_file()]
- report=max(reports,key=lambda p:p.stat().st_mtime) if reports else None
+ report=Path(report_path) if report_path else (max(reports,key=lambda p:p.stat().st_mtime) if reports else None)
  groups=json.loads(report.read_text()).get('groups',[]) if report else []
+ if resume:
+  groups=[g for g in groups if g['state']!='VERIFIED_COMPOSED']
+  book.tab(general,state='disabled');book.tab(fields,state='disabled');book.select(resources)
  ttk.Label(resources,text='Choose an exact archive member when a mod contains alternatives. Choices are bound to the archive hash. A changed or removed winner requires review.',wraplength=960).pack(anchor='w')
  tree=ttk.Treeview(resources,columns=('state',),show='tree headings',height=12);tree.heading('#0',text='Resource');tree.heading('state',text='Resolution');tree.column('#0',width=660);tree.pack(fill='both',expand=True,pady=8)
  by_id={}
@@ -65,18 +68,34 @@ def show(parent,owner):
   selected=tree.selection()
   if not selected:return
   group=by_id[selected[0]];row=labels.get(choice.get())
-  if row:winners[group['target']]={k:row[k] for k in ('mod','member','archiveSha256')}
+  if row:
+   members={(c['mod'],c['member']) for c in group['candidates']}
+   for target,old in list(winners.items()):
+    if target!=group['target'] and (old.get('mod'),old.get('member')) in members:winners.pop(target)
+   winners[group['target']]={k:row[k] for k in ('mod','member','archiveSha256')}
   else:winners.pop(group['target'],None)
   tree.set(selected[0],'state','Selected for next build' if row else 'Automatic merge / mod order')
  ttk.Button(resources,text='Set selected resource choice',command=choose).pack(anchor='w',pady=4)
  ttk.Label(resources,text=str(report) if report else 'Run Scan & stage to discover resource conflicts.',wraplength=960).pack(anchor='w',pady=8)
  def save():
   choose()
-  policy['mod_order']=list(listing.get(0,'end')) if enabled.get() else []
-  policy['weapon_fields']={k:v.get() for k,v in field_controls.items() if v.get()!='Existing rules'}
+  if resume:
+   missing=[g for g in groups if not any(winners.get(g['target'],{}).get('mod')==c['mod'] and winners.get(g['target'],{}).get('member')==c['member'] and winners.get(g['target'],{}).get('archiveSha256')==c['archiveSha256'] for c in g['candidates'])]
+   if missing:messagebox.showinfo('Choose a variant','Select an exact winner for each waiting resource, then continue.',parent=win);return
+  else:
+   policy['mod_order']=list(listing.get(0,'end')) if enabled.get() else []
+   policy['weapon_fields']={k:v.get() for k,v in field_controls.items() if v.get()!='Existing rules'}
   updated=mm.load(mm.CONFIG,{});updated['conflict_priorities']=policy;cp.settings(updated);mm.save(mm.CONFIG,updated)
-  owner.status.set('Priorities saved - run Scan & stage to apply them');win.destroy()
+  owner.status.set('Conflict choice saved - resuming build' if resume else 'Priorities saved - run Scan & stage to apply them');win.destroy()
+  if on_saved:on_saved()
  bottom=ttk.Frame(win,padding=12);bottom.pack(fill='x')
- ttk.Button(bottom,text='Save priorities for next build',command=save).pack(side='left')
- ttk.Button(bottom,text='Cancel',command=win.destroy).pack(side='right')
+ def cancel():
+  win.destroy()
+  if on_cancel:on_cancel()
+ ttk.Button(bottom,text='Save choice and continue' if resume else 'Save priorities for next build',command=save).pack(side='left')
+ ttk.Button(bottom,text='Cancel staging' if resume else 'Cancel',command=cancel).pack(side='right')
+ win.protocol('WM_DELETE_WINDOW',cancel)
+ if resume:
+  if groups:tree.selection_set('0');select()
+  win.transient(parent);win.grab_set()
  return win

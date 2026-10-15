@@ -144,7 +144,7 @@ def read_characterization(path):
     if p.stat().st_size>80*1024*1024:raise ValueError('Unexpectedly large characterization report')
     d=json.loads(p.read_text(encoding='utf-8'))
     if not isinstance(d.get('entries'),list) or len(d['entries'])>50000:
-        raise ValueError('Not a supported DEEF characterization report')
+        raise ValueError('Not a supported Forge Assembly characterization report')
     return p,d
 
 
@@ -284,7 +284,7 @@ def build_report(charpath, outfile=None, cache_path=None):
         writer=csv.writer(f);writer.writerow(['Archive','All members','Relevant members','Verified resource routes','Blocked','All relevant verified?'])
         for r in coverage:writer.writerow([r['archive'],r['totalMembers'],r['relevantMembers'],r['verifiedRoutes'],r['blockedMembers'],r['fullyCovered']])
     reasoncounts=Counter(r['reason'] for r in rows)
-    lines=['DEEF v0.19.4 Exclusion Resolution Priorities',
+    lines=['Forge Assembly - Exclusion Resolution Priorities',
            '==========================================',
            'Characterization: '+str(path),
            'Source status: '+str(d.get('state')),
@@ -308,7 +308,7 @@ def show_gui(parent=None):
     embedded=parent is not None
     win=parent if embedded else tk.Tk()
     if not embedded:
-        win.title('DEEF Exclusion Resolver - manual conflict choices & route discovery')
+        win.title('Forge Assembly - route discovery')
         win.geometry('1220x770');win.minsize(940,600)
     var=tk.StringVar(value=find_characters()[0] if find_characters() else '')
     status=tk.StringVar(value='Select the latest AUTO_CHARACTERIZATION.json; this tool does not modify game files.')

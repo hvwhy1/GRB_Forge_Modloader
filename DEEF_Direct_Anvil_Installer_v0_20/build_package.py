@@ -8,7 +8,7 @@ ROOT=Path(__file__).resolve().parent
 
 
 def package():
-    files=set(ROOT.glob('*.py'))|set(ROOT.glob('*.md'))|{ROOT/'START_DEEF.cmd'}
+    files=set(ROOT.glob('*.py'))|set(ROOT.glob('*.md'))|{ROOT/'START_FORGE_ASSEMBLY.cmd'}
     for folder,patterns in [('data',('*.json',)),('bin',('*.dll','*.exe','*.json')),
                             ('src',('*.cs','*.csproj')),('tests',('*.py',))]:
         for pattern in patterns:files.update((ROOT/folder).glob(pattern))
@@ -17,13 +17,13 @@ def package():
     for name in ('settings.json','additional_options.json'):
         if (ROOT/'workspace'/name).is_file():files.add(ROOT/'workspace'/name)
     if (ROOT/'workspace/quarantined_stages.json').is_file():files.add(ROOT/'workspace/quarantined_stages.json')
-    manifest={'version':'20.0.0','buildRevision':'generalized-priorities-with-fresh-checkout-defaults','launcher':'START_DEEF.cmd','gameFilesIncluded':False,
+    manifest={'version':'20.0.0','product':'Forge Assembly','buildRevision':'interactive-conflict-checkpoints','launcher':'START_FORGE_ASSEMBLY.cmd','gameFilesIncluded':False,
               'files':{p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
                        for p in sorted(files)}}
     (ROOT/'BUILD_MANIFEST.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
-    target=ROOT.parent/'DEEF_Direct_Anvil_Installer_v0_20.zip'
+    target=ROOT.parent/'Forge_Assembly.zip'
     with zipfile.ZipFile(target,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
-        for p in sorted(files|{ROOT/'BUILD_MANIFEST.json'}):z.write(p,ROOT.name+'/'+p.relative_to(ROOT).as_posix())
+        for p in sorted(files|{ROOT/'BUILD_MANIFEST.json'}):z.write(p,'Forge_Assembly/'+p.relative_to(ROOT).as_posix())
     with zipfile.ZipFile(target) as z:
         assert z.testzip() is None
         assert len([n for n in z.namelist() if n.lower().endswith('.cmd')])==1

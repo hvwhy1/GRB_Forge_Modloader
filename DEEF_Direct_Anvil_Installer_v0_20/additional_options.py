@@ -110,7 +110,7 @@ def show_gui(parent=None,game_root=None,mods_dir=None,embedded=False,installer_o
     own_window=parent is None or not embedded
     win=(tk.Toplevel(parent) if parent is not None else tk.Tk()) if own_window else parent
     if own_window:
-        win.title('DEEF Additional Options - First Person / ReShade / Weapon Variants')
+        win.title('Forge Assembly - First Person / ReShade / Weapon Variants')
         win.geometry('900x675');win.minsize(760,560)
     if game_root is None:game_root=r'C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games\Ghost Recon Breakpoint'
     if mods_dir is None:mods_dir=r'C:\Users\Hurt\Desktop\GRB_MODDING\DEEF_Mods'
@@ -123,10 +123,6 @@ def show_gui(parent=None,game_root=None,mods_dir=None,embedded=False,installer_o
     book=ttk.Notebook(win);book.pack(fill='both',expand=True,padx=12,pady=10)
     camera=ttk.Frame(book,padding=14);shade=ttk.Frame(book,padding=14);weapons=ttk.Frame(book,padding=14)
     book.add(camera,text='First Person');book.add(shade,text='ReShade');book.add(weapons,text='Weapon variants')
-    if installer_owner is not None:
-        import config_widgets
-        merge_options=ttk.Frame(book);book.add(merge_options,text='Merge priorities')
-        installer_owner.merge_controls=config_widgets.merge_panel(merge_options,installer_owner)
     if installer_owner is not None:
         native_book=ttk.Notebook(camera);native_book.pack(fill='both',expand=True)
         profile_camera=ttk.Frame(native_book,padding=8);native=ttk.Frame(native_book,padding=8);ini_finder=ttk.Frame(native_book,padding=8)

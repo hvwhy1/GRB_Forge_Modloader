@@ -247,10 +247,6 @@ def merge_panel(parent,owner):
         config=mm.load(mm.CONFIG,{});config.update({k:v.get() for k,v in controls.items()});config['preserve_game_sensitivity']=controls['preserve_game_sensitivity'].get()=='Game settings';mm.save(mm.CONFIG,config)
         owner.status.set('Merge choices saved - scan and stage a new build to apply them')
     owner.button(fixed,'Save merge options',save,True).pack(side='left')
-    def priorities():
-        import priorities_ui
-        priorities_ui.show(parent,owner)
-    owner.button(fixed,'Conflict priorities',priorities).pack(side='left',padx=8)
     ttk.Label(fixed,text='Save, then scan and stage to apply these choices.').pack(side='left',padx=12)
     ttk.Label(frame,text='White-hot vision: after installation, switch to Pathfinder once and activate its vision, then switch back to your preferred class. The author recommends this if white-hot does not appear. The white-hot-only files disable ordinary thermal and, unless checked above, green night vision.',wraplength=740).grid(row=len(options)+3,column=0,columnspan=2,sticky='w',pady=8)
     ttk.Label(frame,text='Damage Balance preserves its damage values while WABO supplies ballistics and handling. Precision LMGs use the existing HTI spread pattern and sway 0.2, preserving recoil, damage, models and attachments. The unsupported T95 bivouac definition is preserved. Vanilla ammo/suppressors use the author optional presets without changing Hardcore health. Vanilla concealment restores the original vision and bush definitions; gameplay still determines which foliage occludes sight. Incompatible wheel swaps are held as a complete group. Saved choices affect a new scan/stage, not an already installed or staged build.',wraplength=740).grid(row=len(options)+4,column=0,columnspan=2,sticky='w',pady=8)

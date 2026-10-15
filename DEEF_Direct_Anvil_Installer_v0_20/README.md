@@ -1,8 +1,8 @@
-# DEEF Breakpoint Mod Studio v20
+# Forge Assembly
 
 ## Build from your mod archives
 
-Run `START_DEEF.cmd`, select your mod archives, then use **Scan & stage** and **Install reviewed batch**. After Ubisoft verification, record a verified baseline first. Scan & stage rebuilds the selected archives; it does not use the saved recovery payload as its source.
+Run `START_FORGE_ASSEMBLY.cmd`, select your mod archives, then use **Scan & stage** and **Install reviewed batch**. After Ubisoft verification, record a verified baseline first. Scan & stage rebuilds the selected archives; it does not use the saved recovery payload as its source.
 
 The October 14 compatibility tests identified startup crashes in the selected Syringe/Binoculars item-wheel replacements and the No ADS Zoom Updated camera replacements. Their four exact archive/member fingerprints are held out of future builds. Other Various Tweaks resources remain eligible. Standard night vision and thermal are selected; the removed white-hot/no-thermal packages are disabled. The separate DX11 FPV camera controls remain available.
 
@@ -12,7 +12,7 @@ Complete base-parent overrides are inserted before entirely new parents, in sepa
 
 1. Finish Ubisoft verification or installation of Ghost Recon Breakpoint.
 2. Close the game.
-3. Run START_DEEF.cmd in this folder.
+3. Run START_FORGE_ASSEMBLY.cmd in this folder.
 4. For recovery, click **Install saved complete setup**.
 
 Scan & stage builds from your enabled mod archives; it does not stage this premade recovery copy.
@@ -33,13 +33,13 @@ Every changed Forge and runtime file is backed up before replacement. The instal
 
 ## Change or rebuild mods
 
-The First person & ReShade page provides separate configuration installers. Numerical camera/FOV values and the toggle key are editable. Merge options offers Author values or 100/125/150/175/200 for player shotgun damage, and the existing gameplay conflict choices.
+The First person & ReShade page provides separate configuration installers. Numerical camera/FOV values and the toggle key are editable. Conflicts & new assets offers Author values or 100/125/150/175/200 for player shotgun damage, and the existing gameplay conflict choices.
 
 Scan & stage rebuilds from enabled archives, using ordered complete Forge foundations, authored assets and verified compatibility merges. Newly added archives go through the same scan and composition process. The saved complete setup is a separate recovery shortcut. Keep AnvilToolkit in its original complete folder or a complete clone for rebuilding; its executable cannot be used alone. Private composition diagnostics and older trial batches are not the saved-setup restore source.
 
 ## Validation
 
-134 automated regression tests pass. The real-size fresh-install replay started with the six original Forge files matching the recorded Ubisoft-verified baseline in a private folder. The installer restored all six modded Forges and every runtime file; all 448 files matched the saved hashes. A second install changed zero Forges and zero runtime files. The live game was untouched during that replay.
+141 automated regression tests pass. The real-size fresh-install replay started with the six original Forge files matching the recorded Ubisoft-verified baseline in a private folder. The installer restored all six modded Forges and every runtime file; all 448 files matched the saved hashes. A second install changed zero Forges and zero runtime files. The live game was untouched during that replay.
 
 Evidence: `workspace/diagnostics/FRESH_INSTALL_REPLAY_20261014_024346/RESULT.json` and `workspace/saved_setup/DX11_COMPLETE_20261014_024812/FRESH_INSTALL_VALIDATION.json`. This proves file reproduction; the private copy was not launched as a separate game installation. The live source build was confirmed working by the user.
 
@@ -57,14 +57,22 @@ Runtime cleanup follows explicit configuration/installation receipts inside the 
 
 ## Conflict priorities and table composition
 
-Open **Setup > Conflict priorities** (also available under **First person & ReShade > Merge priorities**). The three tabs provide an optional ordered mod list, separate weapon field donors, and exact resource/variant choices discovered by a scan. Higher entries win unresolved object conflicts. Ordering starts disabled: unknown conflicts do not receive an alphabetical winner. Save the choices and run a new Scan & stage. Resource choices are bound to the selected archive hash; changed or missing choices require review.
+Open **Conflicts & new assets > Conflict priorities**. Gameplay conflict settings, including Radio/Nightmare caller preferences, are on that same page. The three tabs provide an optional ordered mod list, separate weapon field donors, and exact resource/variant choices discovered by a scan. Higher entries win unresolved object conflicts. Ordering starts disabled: unknown conflicts do not receive an alphabetical winner. Save the choices and run a new Scan & stage. Resource choices are bound to the selected archive hash; changed or missing choices require review.
 
 The general composition process preserves the complete original container, combines distinct objects by binary ID and type, credits identical payloads once, and ignores unchanged copies when another candidate changes that object. Entirely new identities are included and read back, rather than treated as missing targets. Incompatible changes to one object require a priority; variants in the same archive require an exact member choice. Selecting an exact container variant excludes its alternatives rather than mixing their optional assets. All resulting objects and container metadata are checked after repacking, followed by independent Forge readback.
 
 Weapon fields can choose different donors for damage, ballistics, handling, recoil/spread, fire rate, sound/detection range and ADS sensitivity. The established WABO/Damage Balance rule remains the default. The validated AAC magazine/trigger reference merge and authored dominant-payload checks remain active. Vanilla sensitivity and the shotgun/LMG controls run afterward. Unsupported binary layouts are not combined by guessing byte offsets: their objects require a whole-object winner or remain blocked. This is object-level table composition plus schema-aware field merging, not a promise that arbitrary fields in every GRB class can be interpreted.
 
-Each run writes CONFLICT_PRIORITIES.json, CONFLICT_POLICY_REPORT.json, composition proofs and any PRIORITY_EXCLUSIONS.json. Mutually exclusive losers are reported as user exclusions rather than silently credited as installed. A changed selection or build setting invalidates a previously staged batch; changes during a build stop that build. These rules preserve existing prepatch order, compatibility holds, clean-baseline restoration and runtime cleanup. Build and readback verification do not replace gameplay testing.
+Each run writes CONFLICT_PRIORITIES.json, CONFLICT_POLICY_REPORT.json, composition proofs and any PRIORITY_EXCLUSIONS.json. Mutually exclusive losers are reported as user exclusions rather than silently credited as installed. A changed selection or build setting invalidates a previously staged batch; unrelated changes during a build stop that build; exact choices requested by a waiting build are accepted at that checkpoint. These rules preserve existing prepatch order, compatibility holds, clean-baseline restoration and runtime cleanup. Build and readback verification do not replace gameplay testing.
 
 Generalized-conflict validation: 131 regression tests, the C# format checks, and a private archive rebuild of six Forges (14 complete composition steps plus 35 resource edits) passed. Real-container fixtures verified object union, exact variant selection, tied/unranked conflict rejection, and grouping three same-named inputs into the correct two-member binary conflict. The declared DBContainerEntry folder alias also passed a separate Smith & Wesson + WABO + Damage Balance merge with complete database readback. Known camera/addon compatibility exclusions remain. These were private file tests; no live game install or gameplay test was performed for this revision.
 
 Fresh-checkout defaults now enable complete-content composition and the tested gameplay profile even when workspace/settings.json is missing or contains only paths. Existing explicit choices are preserved. A supported WABO Compatibility Tool 1.1.2 ZIP in the selected archive folder is discovered by its verified hash; it is used only as a reader. Missing tools stop weapon composition early with a clear message instead of silently falling back to legacy mapping. The scan log states which process is active. Ubisoft verification does not clear installer caches; complete containers are composed before the smaller remaining characterization pass, and reusable composition outputs remain bound to source/payload hashes. Fresh/partial settings and missing-reader behavior are covered by three additional tests (134 total).
+
+## Forge Assembly layout and interactive staging
+
+Run START_FORGE_ASSEMBLY.cmd. Conflict priorities, mod completeness, and gameplay conflict settings (including Radio/Nightmare caller selection) are grouped under Conflicts & new assets. Open reports is under Diagnostics & recovery. Mod library manages archive selection; First person & ReShade retains its configuration/install controls.
+
+Resolvable composition conflicts pause the current private build and open the exact-variant chooser automatically. Save choice and continue retries the failed composition step against the same verified source, preserving earlier completed layers. During that pause only current resource choices can change. Cancel staging releases the worker without an error popup. Corruption, ambiguous physical identities and unrelated configuration changes still stop rather than approving unsafe files.
+
+Mod selection now follows archive presence and saved user choices, without applying an author's mod-list defaults. Historical route evidence, author credits and verified compatibility rules remain. Existing workspace paths and receipt identifiers retain their legacy names for backup compatibility; update the program files in place and keep workspace/backups in place. New tools packages are Forge_Assembly.zip. The UI layout, asynchronous Save/Continue and Cancel paths, and resumed build/install/rollback are covered by 141 tests. A real private MK48 variant conflict was selected and retried successfully with independent Forge readback; the live game was untouched.

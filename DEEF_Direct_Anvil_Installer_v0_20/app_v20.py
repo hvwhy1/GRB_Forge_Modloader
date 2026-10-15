@@ -1,4 +1,4 @@
-"""Unified DEEF v20 desktop app. All archive work is staged before deployment."""
+"""Forge Assembly desktop app. All archive work is staged before deployment."""
 import argparse
 import json
 import os
@@ -25,7 +25,7 @@ class App:
         self.busy = False
         self.manifest = None
         self.buttons = []
-        root.title('DEEF - Breakpoint Mod Studio 20')
+        root.title('Forge Assembly - Breakpoint Mod Installer')
         root.geometry('1240x850'); root.minsize(1040, 740)
         root.configure(bg='#111827')
         style = ttk.Style(root); style.theme_use('clam')
@@ -56,14 +56,14 @@ class App:
             'backup_root': str(mm.WORK / 'backups')}.items()}
         self.status = tk.StringVar(value='Ready - game verification must finish before a new baseline is recorded')
         self.baseline_text = tk.StringVar()
-        self.stage_text = tk.StringVar(value='No v20 batch selected')
+        self.stage_text = tk.StringVar(value='No staged batch selected')
         self.profile = tk.StringVar(value='Enabled mod selection')
         self.single_mod = tk.StringVar()
         shell = ttk.Frame(root, padding=18); shell.pack(fill='both', expand=True)
         shell.columnconfigure(1, weight=1); shell.rowconfigure(0, weight=1)
         sidebar = ttk.Frame(shell, width=185); sidebar.grid(row=0,column=0,sticky='ns',padx=(0,20))
-        ttk.Label(sidebar,text='DEEF',style='Title.TLabel').pack(anchor='w',pady=(0,2))
-        ttk.Label(sidebar,text='MOD STUDIO 20',style='Muted.TLabel').pack(anchor='w',pady=(0,24))
+        ttk.Label(sidebar,text='FORGE',style='Title.TLabel').pack(anchor='w',pady=(0,2))
+        ttk.Label(sidebar,text='ASSEMBLY',style='Muted.TLabel').pack(anchor='w',pady=(0,24))
         self.content = ttk.Frame(shell); self.content.grid(row=0,column=1,sticky='nsew')
         self.content.columnconfigure(0,weight=1); self.content.rowconfigure(0,weight=1)
         self.pages = {}; self.hosts={};self.scrolls={}; self.loaded = set()
@@ -98,8 +98,8 @@ class App:
             try:
                 state=self.validate_batch(previous)
                 self.manifest=previous
-                self.stage_text.set('Last v20 batch - '+str(len(state.get('finishedRoutes',[])))+' replacement edits - '+Path(previous).name)
-                self.status.set('Last v20 batch loaded - installation and gameplay status are in the reports')
+                self.stage_text.set('Previous staged batch - '+str(len(state.get('finishedRoutes',[])))+' replacement edits - '+Path(previous).name)
+                self.status.set('Previous staged batch loaded - installation and gameplay status are in the reports')
             except (ValueError,RuntimeError,KeyError,TypeError):pass
         root.bind('<MouseWheel>',lambda e:self.scrolls[self.active_page].yview_scroll(-int(e.delta/120),'units')
             if self.active_page in self.scrolls else None)
@@ -146,15 +146,8 @@ class App:
         ttk.Separator(page).pack(fill='x',pady=18)
         ttk.Label(page,textvariable=self.stage_text,wraplength=920).pack(anchor='w',pady=(0,10))
         installbar=ttk.Frame(page);installbar.pack(fill='x')
-        self.button(installbar,'Select a v20 batch',self.select_batch).pack(side='left',padx=(0,8))
+        self.button(installbar,'Select a staged batch',self.select_batch).pack(side='left',padx=(0,8))
         self.button(installbar,'3 - Install reviewed batch',self.install).pack(side='left',padx=8)
-        self.button(installbar,'Open reports',lambda:self.open_folder(mm.WORK)).pack(side='left',padx=8)
-        reviewbar=ttk.Frame(page);reviewbar.pack(fill='x',pady=8)
-        self.button(reviewbar,'Review mod completeness',self.review_coverage).pack(side='left')
-        def priorities():
-            import priorities_ui
-            priorities_ui.show(self.root,self)
-        self.button(reviewbar,'Conflict priorities',priorities).pack(side='left',padx=12)
         ttk.Label(page,text='Build order: prepatched Forge files -> complete Forge mods -> resource edits inside those results. '
                   'Competing whole-file variants are reported. New asset experiments have their own private workspace. Existing complete parents are preserved; '
                   'ambiguous choices remain in the review report. Game compatibility still needs an in-game test.',
@@ -164,7 +157,7 @@ class App:
     def diagnostics_page(self):
         page=self.pages['diagnostics']
         self.heading(page,'Diagnostics & recovery','Check the tool build, inspect private Forge tables, or restore a recorded installation.')
-        for label,fn in [('Run tool self-tests',self.self_tests),('Open crash investigation',lambda:self.open_folder(mm.WORK/'diagnostics')),
+        for label,fn in [('Open reports',lambda:self.open_folder(mm.WORK)),('Run tool self-tests',self.self_tests),('Open crash investigation',lambda:self.open_folder(mm.WORK/'diagnostics')),
                          ('Observe game startup',self.startup_test),
                          ('Restore a config / first-person installation',self.restore_config),
                          ('Audit two private Forge files',self.audit_files),('Restore an installation backup',self.restore),
@@ -175,8 +168,8 @@ class App:
                   'that a mod can load in the game. Recovery uses the saved hashes and atomic replacement.',
                   style='Muted.TLabel',wraplength=880).pack(anchor='w',pady=20)
 
-    def navigate(self,key):
-        if self.busy and key not in self.loaded:return
+    def navigate(self,key,force=False):
+        if self.busy and key not in self.loaded and not force:return
         if key not in self.loaded:
             if key=='options':
                 import additional_options
@@ -184,11 +177,24 @@ class App:
                     game_root=lambda:self.paths['game_root'].get(),mods_dir=lambda:self.paths['archive_dir'].get(),installer_owner=self)
             elif key=='library':
                 self.save_paths();self.library_page()
-            elif key=='review':
-                import resolver
-                resolver.show_gui(parent=self.pages[key])
+            elif key=='review':self.conflicts_page()
             self.loaded.add(key)
         self.active_page=key;self.hosts[key].tkraise()
+
+    def conflicts_page(self):
+        page=self.pages['review'];self.heading(page,'Conflicts & new assets','Choose variants, review completeness and merge gameplay settings before installation.')
+        bar=ttk.Frame(page);bar.pack(fill='x',pady=(0,8))
+        def priorities():
+            import priorities_ui
+            priorities_ui.show(self.root,self)
+        self.button(bar,'Conflict priorities',priorities).pack(side='left')
+        self.button(bar,'Review mod completeness',self.review_coverage).pack(side='left',padx=10)
+        book=ttk.Notebook(page);book.pack(fill='both',expand=True)
+        settings=ttk.Frame(book);routes=ttk.Frame(book)
+        book.add(settings,text='Gameplay conflicts');book.add(routes,text='Routes & new assets')
+        import config_widgets,resolver
+        self.merge_controls=config_widgets.merge_panel(settings,self)
+        resolver.show_gui(parent=routes)
 
     def library_page(self):
         page=self.pages['library'];self.heading(page,'Mod library','Choose enabled archives and stage INI edits in this workspace.')
@@ -196,15 +202,6 @@ class App:
         archives=ttk.Frame(book,padding=10);ini=ttk.Frame(book,padding=10)
         book.add(archives,text='Archives');book.add(ini,text='INI workspace')
         bar=ttk.Frame(archives);bar.pack(fill='x',pady=(0,10))
-        choicebar=ttk.Frame(archives);choicebar.pack(fill='x',pady=(0,10))
-        ttk.Label(choicebar,text='Radio/Nightmare caller conflicts:').pack(side='left',padx=(0,10))
-        caller_priority=tk.StringVar(value=mm.load(mm.CONFIG,{}).get('nightmare_caller_priority','New Reinforcements'))
-        caller_choice=ttk.Combobox(choicebar,textvariable=caller_priority,values=('New Reinforcements','Traffic Improvements'),state='readonly',width=24)
-        caller_choice.pack(side='left')
-        def save_caller_choice(_):
-            cfg=mm.load(mm.CONFIG,mm.DEFAULT_SETTINGS);cfg['nightmare_caller_priority']=caller_priority.get();mm.save(mm.CONFIG,cfg)
-            self.status.set('Caller priority saved - scan and stage to apply')
-        caller_choice.bind('<<ComboboxSelected>>',save_caller_choice)
         table=ttk.Frame(archives);table.pack(fill='both',expand=True)
         tree=ttk.Treeview(table,columns=('Enabled','Archive','Files','Status'),show='headings',selectmode='browse')
         for label,width in [('Enabled',75),('Archive',530),('Files',60),('Status',145)]:
@@ -254,23 +251,27 @@ class App:
     def refresh_state(self):
         state=policy.recovery_state()
         self.baseline_text.set('Baseline: waiting for completed Ubisoft verification' if state.get('installationPaused',True)
-            else 'Baseline recorded - '+str(len(state.get('hashes',{})))+' Forge files - fresh v20 stages only')
+            else 'Baseline recorded - '+str(len(state.get('hashes',{})))+' Forge files - verified stages only')
 
     def notify(self,text):self.events.put(('log',str(text)))
+
+    def lock_controls(self,parent):
+        for widget in parent.winfo_children():
+            if widget.winfo_class() in ('TButton','TEntry','TCombobox','TCheckbutton','TRadiobutton'):
+                previous=widget.cget('state')
+                if str(previous)!='disabled':self.locked.append((widget,previous));widget.configure(state='disabled')
+            self.lock_controls(widget)
 
     def task(self,fn,done=None):
         if self.busy:return
         self.busy=True;self.progress.start(12);self.status.set('Working - progress appears below')
         self.locked=[]
-        def lock(parent):
-            for widget in parent.winfo_children():
-                if widget.winfo_class() in ('TButton','TEntry','TCombobox','TCheckbutton','TRadiobutton'):
-                    previous=widget.cget('state');self.locked.append((widget,previous));widget.configure(state='disabled')
-                lock(widget)
-        lock(self.content)
+        self.lock_controls(self.content)
         def worker():
             try:self.events.put(('done',(fn(),done)))
-            except Exception as exc:self.events.put(('error',str(exc)))
+            except Exception as exc:
+                from conflict_flow import StagingCancelled
+                self.events.put(('cancelled' if isinstance(exc,StagingCancelled) else 'error',str(exc)))
         threading.Thread(target=worker,daemon=True).start()
 
     def drain(self):
@@ -281,6 +282,15 @@ class App:
                     self.log.configure(state='normal');self.log.insert('end',value)
                     if not value.endswith('\n'):self.log.insert('end','\n')
                     self.log.see('end');self.log.configure(state='disabled')
+                elif kind=='conflict':
+                    import priorities_ui
+                    self.navigate('review',force=True);self.lock_controls(self.content);self.progress.stop()
+                    self.status.set('Build waiting - choose a resource variant to continue')
+                    def resume(request=value):request.answer(True);self.progress.start(12)
+                    try:
+                        priorities_ui.show(self.root,self,report_path=value.report,resume=True,on_saved=resume,on_cancel=lambda request=value:request.answer(False))
+                    except Exception as exc:
+                        value.answer(False);self.notify('Conflict chooser could not open: '+str(exc))
                 else:
                     self.busy=False;self.progress.stop()
                     for widget,previous in self.locked:
@@ -288,6 +298,7 @@ class App:
                     if kind=='error':
                         self.status.set('Operation stopped - '+value);self.notify('ERROR: '+value)
                         messagebox.showerror('Operation stopped',value,parent=self.root)
+                    elif kind=='cancelled':self.status.set(value);self.notify(value)
                     else:
                         result,done=value
                         self.status.set('Operation complete')
@@ -306,6 +317,7 @@ class App:
     def stage(self,analyze_only=False):
         try:policy.require_ready(self.paths['game_root'].get())
         except Exception as exc:messagebox.showinfo('Baseline needed',str(exc),parent=self.root);return
+        self.manifest=None
         self.save_paths();paths={k:v.get() for k,v in self.paths.items()}
         selected=self.single_mod.get() if self.profile.get()=='One mod diagnostic' else None
         if selected is not None and not selected:
@@ -321,7 +333,7 @@ class App:
             try:
                 return perform(paths['archive_dir'],paths['game_root'],paths['toolkit'],paths['backup_root'],
                     stage=not analyze_only,install=False,allow_subset=True,full_game_scan=True,
-                    saved_mods=saved,notify=self.notify,
+                    saved_mods=saved,notify=self.notify,choose_conflict=self.request_conflict_choice,
                     build_scope='DIAGNOSTIC_SINGLE_MOD' if selected else 'ENABLED_MOD_SELECTION')
             finally:
                 if previous_selection is not None:mm.save(mm.STATE,previous_selection)
@@ -338,14 +350,20 @@ class App:
             self.stage_text.set('Stage: '+report['state']+' - '+str(report.get('selectedArchiveCount','?'))+' enabled archives, '+str(report.get('stagedForges',0))+' Forges, '+str(report.get('stagedRoutes',0))+' edits - report '+str(run))
             incomplete=report.get('incompleteMods',0)
             self.status.set(f'Stage has {incomplete} incomplete mods - review MOD_COVERAGE.txt' if incomplete else 'Stage ready for review' if self.manifest else 'Analysis complete - review the reports')
+            if incomplete:self.navigate('review')
         self.task(work,done)
+
+    def request_conflict_choice(self,report,message):
+        from conflict_flow import ChoiceRequest
+        request=ChoiceRequest(report,message);self.events.put(('conflict',request))
+        return request.wait()
 
     def validate_batch(self,manifest):
         state=json.loads(Path(manifest).read_text(encoding='utf-8'))
         policy.require_install(state,manifest);return state
 
     def select_batch(self):
-        picked=filedialog.askopenfilename(initialdir=mm.WORK,title='Select fresh v20 batch',filetypes=[('Batch JSON','*.json')])
+        picked=filedialog.askopenfilename(initialdir=mm.WORK,title='Select a verified staged batch',filetypes=[('Batch JSON','*.json')])
         if not picked:return
         try:
             state=self.validate_batch(picked)
@@ -357,7 +375,7 @@ class App:
         if not self.manifest:return
         folder=Path(self.manifest).parent;source=folder/'characterization/AUTO_CHARACTERIZATION.json'
         if not source.is_file():
-            messagebox.showinfo('Coverage unavailable','Choose a layered v20 stage with its characterization report.',parent=self.root);return
+            messagebox.showinfo('Coverage unavailable','Choose a layered stage with its characterization report.',parent=self.root);return
         import mod_coverage
         report=mod_coverage.write(json.loads(source.read_text(encoding='utf-8')),json.loads(Path(self.manifest).read_text(encoding='utf-8')),folder)
         self.status.set(f"{report['incompleteMods']} incomplete mods - see MOD_COVERAGE.txt")
@@ -478,7 +496,7 @@ class App:
         audit=filedialog.askopenfilename(initialdir=mm.WORK,title='Select fresh NEW_RESOURCE_AUDIT.json',filetypes=[('Audit JSON','*.json')])
         if not audit:return
         if mm.WORK.resolve() not in Path(audit).resolve().parents:
-            messagebox.showerror('Fresh audit required','Choose an audit created in this v20 workspace.');return
+            messagebox.showerror('Fresh audit required','Choose an audit created in this installer workspace.');return
         import auto_additions
         game=self.paths['game_root'].get();mods=self.paths['archive_dir'].get();kit=self.paths['toolkit'].get()
         self.task(lambda:auto_additions.stage(audit,game,mods,kit,base_manifest=self.manifest,notify=self.notify),

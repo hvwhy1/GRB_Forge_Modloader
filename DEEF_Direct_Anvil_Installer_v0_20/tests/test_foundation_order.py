@@ -62,7 +62,7 @@ class FoundationOrderTests(unittest.TestCase):
 if __name__=='__main__':unittest.main()
 
 class LayeredBuildTests(unittest.TestCase):
-    def test_resource_edits_use_unlock_result_and_stale_source_is_rejected(self):
+    def test_resource_edits_use_unlock_result_and_stale_source_is_rejected(self,resume=False):
         import copy
         import batch_engine as be
         import deployment_policy as policy
@@ -95,9 +95,20 @@ class LayeredBuildTests(unittest.TestCase):
                 entry={'relative':source.name,'staged':str(dest),'sourceSha256':be.sha256(source),'stagedSha256':be.sha256(dest),'streamReceipt':str(receipt)}
                 state={'schema':3,'writer':'FORGE_STREAM_BATCH_V27','privateOnly':True,'status':'VERIFIED_STAGED','plan':plan,'outputs':{str(source):entry},'finishedRoutes':plan['routes'],'excludedRoutes':[]}
                 be.record_json(out/'BATCH_RESULT.json',state);return state
-            with patch.object(mm,'WORK',work),patch.object(mm,'STATE',work/'mods.json'),patch.object(mm,'CONFIG',work/'settings.json'),patch.object(policy,'WORK',work),patch.object(policy,'STATE',baseline),patch.object(mm,'extraction_target',side_effect=lambda archive,*args,**kwargs:next(v for k,v in payloads.items() if Path(k).name==Path(archive).name)),patch.object(auto_mapping,'analyze',side_effect=analyze),patch.object(be,'stage_plan_stream',side_effect=stage),patch.object(forge_audit,'read_index',return_value={'entries':[{'id':'0000000000000100'}]}),patch.object(lp,'prepare_guided_additions',return_value=[]):
-                run,report=lp.perform(mods,game,kit,root/'backups',notify=lambda s:None,inspect=lambda *args:{'verified':True,'independentAnvilIndexVerified':True,'nestedDataEntries':['container']})
+            def choose(report,message):
+                values=mm.load(mm.CONFIG,{})
+                values['conflict_priorities']={'resource_winners':{'datapc_patch_01.forge||#1:2':dict(mod='Tweaks.zip',member='edit.bin',archiveSha256='a'*64)}}
+                mm.save(mm.CONFIG,values);return True
+            def prepare_content(selected,view,game,toolkit,run_dir,current,log,**kwargs):
+                if resume:
+                    report=run_dir/'CONFLICT_POLICY_REPORT.json'
+                    be.record_json(report,{'groups':[{'target':'datapc_patch_01.forge||#1:2','state':'VERIFIED_BINARY_CONFLICT_GROUP','candidates':[dict(mod='Tweaks.zip',member='edit.bin',archiveSha256='a'*64)]}]})
+                    self.assertTrue(kwargs['choose_conflict'](report,'waiting choice'))
+                return selected,[]
+            with patch.object(mm,'WORK',work),patch.object(mm,'STATE',work/'mods.json'),patch.object(mm,'CONFIG',work/'settings.json'),patch.object(policy,'WORK',work),patch.object(policy,'STATE',baseline),patch.object(mm,'extraction_target',side_effect=lambda archive,*args,**kwargs:next(v for k,v in payloads.items() if Path(k).name==Path(archive).name)),patch.object(auto_mapping,'analyze',side_effect=analyze),patch.object(be,'stage_plan_stream',side_effect=stage),patch.object(forge_audit,'read_index',return_value={'entries':[{'id':'0000000000000100'}]}),patch.object(lp,'prepare_guided_additions',return_value=[]),patch('complete_content.prepare',side_effect=prepare_content):
+                run,report=lp.perform(mods,game,kit,root/'backups',notify=lambda s:None,inspect=lambda *args:{'verified':True,'independentAnvilIndexVerified':True,'nestedDataEntries':['container']},choose_conflict=choose if resume else None)
                 manifest=Path(report['batch']);state=json.loads(manifest.read_text())
+                if resume:self.assertEqual(report['conflictChoicesResumed'],1)
                 self.assertEqual(Path(state['outputs'][str(forge)]['staged']).read_bytes(),b'UNLOCK+EDIT')
                 self.assertEqual(forge.read_bytes(),b'STOCK')
                 self.assertEqual(lp.inspect_stage(manifest)['foundationSteps'],2)
@@ -110,6 +121,12 @@ class LayeredBuildTests(unittest.TestCase):
                 innerfile=Path(state['resourceManifest']);inner=json.loads(innerfile.read_text());inner['outputs'][str(run/'ComposedGame'/forge.name)]['sourceSha256']=be.sha256(payloads[str(root/'Pre patch forge files for modding-1040-1.zip')])
                 inner['plan']['sourceHashes']=dict.fromkeys(inner['outputs'],inner['outputs'][str(run/'ComposedGame'/forge.name)]['sourceSha256']);be.record_json(innerfile,inner)
                 with self.assertRaisesRegex(ValueError,'earlier Forge layer'):lp.inspect_stage(manifest)
+
+
+class ResumeBuildTests(LayeredBuildTests):
+    # Exercise the same private build/install/rollback path with a mid-build choice.
+    def test_resource_edits_use_unlock_result_and_stale_source_is_rejected(self):
+        super().test_resource_edits_use_unlock_result_and_stale_source_is_rejected(resume=True)
 
 
 class ArchiveSnapshotTests(unittest.TestCase):

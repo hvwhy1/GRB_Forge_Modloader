@@ -96,7 +96,7 @@ def verified_loose(mods,game):
     return rows
 
 
-def merge_weapons(items,run,config,stock=None):
+def merge_weapons(items,run,config,stock=None,choose_conflict=None):
     from weapon_stats_merge import AuthorReader,merge,FIELDS
     import conflict_policy as cp
     grouped=defaultdict(list);others=[];proofs=[]
@@ -120,6 +120,9 @@ def merge_weapons(items,run,config,stock=None):
         base=bases[0];explicit_base=False
         if len(bases)>1 and len({be.sha256(payload(i)) for i in bases})>1:
             base=cp.inspect_group(bases,config,'DataPC_patch_01.forge','DBContainerEntry_0X104634F921.data',run)
+            if base is None and choose_conflict and choose_conflict(run/'CONFLICT_POLICY_REPORT.json','Competing weapon layouts: '+bases[0]['name']):
+                config['conflict_priorities']=mm.load(mm.CONFIG,{}).get('conflict_priorities',{})
+                base=cp.inspect_group(bases,config,'DataPC_patch_01.forge','DBContainerEntry_0X104634F921.data',run)
             if base is None:raise ValueError('Competing weapon layouts need an explicit priority: '+bases[0]['name'])
             explicit_base=True
         donors=[]
@@ -173,7 +176,7 @@ def merge_weapons(items,run,config,stock=None):
     return others
 
 
-def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None):
+def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None,choose_conflict=None):
     cfg=mm.load(mm.CONFIG,{})
     if not cfg.get('complete_content_pipeline'):
         log('Complete-content composition explicitly disabled in settings; using legacy resource mapping.')
@@ -197,7 +200,7 @@ def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None):
         updated['Installer gameplay options']={'members':[], 'enabled':False}
     archive_hashes={}
     seq=0
-    def compose(forge,items,parent=None):
+    def compose(forge,items,parent=None,attempt=0):
         nonlocal seq
         seq+=1;folder=run/'CompleteContents'/str(seq);folder.mkdir(parents=True)
         source=view/forge;req=[];covered=defaultdict(list);archives={}
@@ -239,7 +242,17 @@ def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None):
             with (folder/'CONSOLE.txt').open('w',encoding='utf-8') as f:p=subprocess.run(command,stdout=f,stderr=subprocess.STDOUT)
             result=json.loads(proof.read_text(encoding='utf-8')) if proof.is_file() else {}
             if parent is None:cp.container_groups(run,forge,folder,items)
-            if p.returncode or result.get('verified') is not True:raise ValueError('Complete content composition failed: '+str(proof)+' : '+str(result.get('error',''))[-450:])
+            if p.returncode or result.get('verified') is not True:
+                import conflict_flow
+                error=str(result.get('error',''))
+                if choose_conflict and conflict_flow.recoverable(error) and attempt<32:
+                    log('Waiting for a resource choice. Completed private composition steps are preserved.')
+                    if choose_conflict(run/'CONFLICT_POLICY_REPORT.json',error):
+                        if be.sha256(source)!=current[target]:raise ValueError('Composed source changed while waiting for a conflict choice')
+                        cfg['conflict_priorities']=mm.load(mm.CONFIG,{}).get('conflict_priorities',{})
+                        log('Conflict choice saved; resuming the current composition step.')
+                        return compose(forge,items,parent,attempt+1)
+                raise ValueError('Complete content composition failed: '+str(proof)+' : '+error[-450:])
             cache_file.parent.mkdir(parents=True,exist_ok=True)
             cache[key]={'proof':str(proof),'output':result['output']};mm.save(cache_file,cache)
         if parent is None and result.get('reusedVerifiedProof'):
@@ -268,7 +281,7 @@ def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None):
             pass # Keep separate Forge destinations; author package layout matters.
         compose(forge,items)
     for (forge,data),items in sorted(inner.items()):
-        if 'dbcontainerentry' in data:items=merge_weapons(items,run,cfg,stock)
+        if 'dbcontainerentry' in data:items=merge_weapons(items,run,cfg,stock,choose_conflict=choose_conflict)
         index=forge_audit.read_index(view/forge)
         matches=[e for e in index['entries'] if logical(e['name']+'.data')==data]
         if len(matches)!=1:raise ValueError('Complete inner parent unresolved: '+forge+'/'+data)

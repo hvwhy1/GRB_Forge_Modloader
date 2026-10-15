@@ -31,21 +31,7 @@ DEFAULT_MODS=r'C:\Users\Hurt\Desktop\GRB_MODDING\DEEF_Mods'
 
 
 def choose_default_flags(mods):
-    desired=json.loads(auto_mapping.LIST_FILE.read_text(encoding='utf-8'))['mods']
-    by_id=collections.defaultdict(list)
-    for item in desired:
-        by_id[str(item['nexus_id'])].append(item)
-    for key,mod in mods.items():
-        if 'enabled' in mod and mod.get('_enabled_by_user'):
-            continue
-        name=Path(key).name
-        match=re.search(r'-(\d{2,5})-(?:\d|v|V)',name)
-        if not match:continue
-        entries=by_id.get(match.group(1),[])
-        if len(entries)==1:
-            entry=entries[0]
-            if entry.get('enabled') is False:
-                mod['enabled']=False
+    # Archive presence and saved user choices define the library, not an author mod list.
     return mods
 
 
@@ -64,7 +50,7 @@ def create_paths(archive_dir, game, kit, backup):
 def _perform(archive_dir,game,toolkit,backup, *, stage=True, install=False,
             allow_subset=False,notify=lambda x:print(x,flush=True),
             saved_mods=None, inspect=None, stage_func=None, game_check=be.game_processes_running,
-            full_game_scan=False):
+            full_game_scan=False, choose_conflict=None):
     import deployment_policy
     deployment_policy.require_ready(game)
     ar,gm,tk,bk=create_paths(archive_dir,game,toolkit,backup)
@@ -75,7 +61,7 @@ def _perform(archive_dir,game,toolkit,backup, *, stage=True, install=False,
     if layered_pipeline.has_foundations(selected):
         return layered_pipeline.perform(selected,gm,tk,bk,stage=stage,install=install,
             allow_subset=allow_subset,notify=notify,inspect=inspect,game_check=game_check,
-            full_game_scan=full_game_scan)
+            full_game_scan=full_game_scan,choose_conflict=choose_conflict)
     run=mm.WORK/'auto_runs'/(time.strftime('%Y%m%d_%H%M%S')+'_'+os.urandom(3).hex())
     run.mkdir(parents=True,exist_ok=False)
     report={'schema':'DEEF.auto_setup.19','state':'SCANNING','installRequested':bool(install),

@@ -154,7 +154,7 @@ def snapshot_archives(mods,run):
 
 
 def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=False,
-            notify=print,inspect=None,game_check=be.game_processes_running,full_game_scan=False):
+            notify=print,inspect=None,game_check=be.game_processes_running,full_game_scan=False,choose_conflict=None):
     import auto_mapping
     baseline=policy.require_ready(game);game=Path(game).resolve();toolkit=Path(toolkit).resolve()
     import conflict_policy
@@ -227,7 +227,20 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
         for layer in guided_layers:archives[layer['archive']]=layer['archiveSha256']
         import complete_content
         runtime_mods=copy.deepcopy(mods)
-        mods,content_layers=complete_content.prepare(mods,view,game,toolkit,run,current,log,baseline_sources=sources)
+        def request_choice(path,message):
+            nonlocal initial_settings
+            if conflict_policy.build_settings(mm.load(mm.CONFIG,{}))!=initial_settings:
+                raise ValueError('Build settings changed outside the current conflict choice; restart staging.')
+            import conflict_flow
+            report.update(state='WAITING_FOR_CHOICE',conflictReport=str(path));save()
+            accepted=conflict_flow.resolve(path,message,choose_conflict)
+            if accepted:
+                initial_settings=conflict_policy.build_settings(mm.load(mm.CONFIG,{}))
+                be.record_json(run/'CONFLICT_PRIORITIES.json',conflict_policy.settings(mm.load(mm.CONFIG,{})))
+                report['conflictChoicesResumed']=report.get('conflictChoicesResumed',0)+1
+            report['state']='COMPOSING';save()
+            return accepted
+        mods,content_layers=complete_content.prepare(mods,view,game,toolkit,run,current,log,baseline_sources=sources,choose_conflict=request_choice if choose_conflict else None)
         layers.extend(content_layers)
         for layer in content_layers:archives.update(layer['sourceArchives'])
         be.record_json(run/'INSTALL_ORDER.json',{'phases':list(PHASES),'layers':layers,
@@ -340,7 +353,8 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
             report.update(state='INSTALLED_VERIFIED_BYTES',transaction=str(tx));save()
         return run,report
     except Exception as exc:
-        report['state']='FAILED';report['errors'].append(str(exc));save();raise
+        from conflict_flow import StagingCancelled
+        report['state']='CANCELLED' if isinstance(exc,StagingCancelled) else 'FAILED';report['errors'].append(str(exc));save();raise
 
 
 def inspect_stage(manifest,expected_game=None,verify_backups=False):
