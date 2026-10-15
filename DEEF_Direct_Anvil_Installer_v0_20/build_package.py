@@ -17,7 +17,7 @@ def package():
     for name in ('settings.json','additional_options.json'):
         if (ROOT/'workspace'/name).is_file():files.add(ROOT/'workspace'/name)
     if (ROOT/'workspace/quarantined_stages.json').is_file():files.add(ROOT/'workspace/quarantined_stages.json')
-    manifest={'version':'20.0.0','buildRevision':'generalized-conflict-priorities-and-object-union','launcher':'START_DEEF.cmd','gameFilesIncluded':False,
+    manifest={'version':'20.0.0','buildRevision':'generalized-priorities-with-fresh-checkout-defaults','launcher':'START_DEEF.cmd','gameFilesIncluded':False,
               'files':{p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
                        for p in sorted(files)}}
     (ROOT/'BUILD_MANIFEST.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')

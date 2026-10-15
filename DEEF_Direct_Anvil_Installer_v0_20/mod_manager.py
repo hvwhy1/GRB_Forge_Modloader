@@ -20,7 +20,7 @@ CONFIG = WORK / 'settings.json'
 MOD_EXT = {'.zip', '.7z', '.rar'}
 ARCHIVE_EXT = {'.zip', '.7z', '.rar'}
 DEFAULT_SETTINGS = {
-    'toolkit': DEFAULT_TOOLKIT, 'forge': '', 'archive_dir': r'C:\Users\Hurt\Desktop\GRB_MODDING\DEEF_Mods',
+    'toolkit': DEFAULT_TOOLKIT, 'forge': '', 'archive_dir': str(ROOT.parent / 'DEEF_Mods'),
     'camera_clearance_m': '0.22', 'camera_x_m': '0.0',
     'camera_y_m': '0.0', 'camera_z_m': '0.0', 'game_root': '', 'backup_root': str(WORK / 'backups'),
     'hip_fov_deg': '', 'ads_fov_deg': '', 'body_follow_strength': '',
@@ -30,17 +30,33 @@ DEFAULT_SETTINGS = {
     'native_renderer_config': '', 'native_camera_config': '', 'native_input_config': '',
     'first_person_variant': 'Easy First Person v3 + Native First Person 0.2.10',
     'ready_stance_requested': False,
-    'config_application': 'PREVIEW_ONLY_NOT_APPLIED_TO_GAME'
+    'config_application': 'PREVIEW_ONLY_NOT_APPLIED_TO_GAME',
+    'complete_content_pipeline': True,
+    'weapon_damage_priority': 'Damage Balance', 'wabo_difficulty': '4_Realistic (Hardcore)',
+    'thermal_priority': 'Standard night vision and thermal', 'item_wheel_variant': 'Vanilla item wheel',
+    'nightmare_caller_priority': 'New Reinforcements', 'preserve_game_sensitivity': True,
+    'foliage_profile': 'Vanilla concealment', 'npc_trigger_priority': 'Vanilla automatic fire',
+    'preserve_player_automatic_fire': True, 'preserve_night_vision': True,
+    'shotgun_damage_profile': '150', 'lmg_accuracy_profile': 'Precision',
+    'ammo_capacity_profile': 'Vanilla', 'suppressor_profile': 'Vanilla-like', 'bcm_handguard': 'Black'
 }
 
 def mkdir():
     WORK.mkdir(parents=True, exist_ok=True)
 
 def load(path, default):
+    path=Path(path)
+    if path.resolve()==CONFIG.resolve() and isinstance(default,dict):
+        # A fresh checkout and an older partial settings file must use the same
+        # build process; local, ignored workspace settings are not prerequisites.
+        default=dict(DEFAULT_SETTINGS,**default)
     if not path.exists():
         return default.copy() if isinstance(default, dict) else list(default)
     with path.open('r', encoding='utf-8') as f:
-        return json.load(f)
+        value=json.load(f)
+    if path.resolve()==CONFIG.resolve() and isinstance(default,dict) and isinstance(value,dict):
+        return dict(default,**value)
+    return value
 
 def save(path, value):
     mkdir()

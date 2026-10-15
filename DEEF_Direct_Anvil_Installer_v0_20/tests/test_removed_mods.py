@@ -19,7 +19,7 @@ class RemovedModTests(unittest.TestCase):
             be.record_json(tx,{'status':'INSTALLED','gameRoot':str(game),'files':[{'target':str(removed),'backup':str(original),'originalSha256':be.sha256(original),'installedSha256':be.sha256(removed)}]})
             baseline=work/'baseline.json'
             be.record_json(baseline,{'installationPaused':False,'baselineId':'test','gameRoot':str(game),'hashes':{str(main):be.sha256(main),str(removed):be.sha256(original)}})
-            cfg=work/'settings.json';be.record_json(cfg,{'last_transaction':str(tx)})
+            cfg=work/'settings.json';be.record_json(cfg,{'last_transaction':str(tx),'complete_content_pipeline':False})
             archive=root/'Pre patch forge files for modding-1040-1.zip';archive.write_bytes(b'archive')
             payload=root/'prepatch.forge';payload.write_bytes(b'PREPATCH')
             mods={archive.name:dict(archive=str(archive),members=[main.name],enabled=True,status='INDEXED')}

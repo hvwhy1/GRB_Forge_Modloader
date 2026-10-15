@@ -79,6 +79,7 @@ class LayeredBuildTests(unittest.TestCase):
                 archive=root/name;archive.write_bytes(body+b'archive');payload=root/(name+'.forge');payload.write_bytes(body)
                 mods[name]={'archive':str(archive),'members':[forge.name],'enabled':True,'status':'INDEXED'};payloads[str(archive)]=payload
             resource=root/'Tweaks.zip';resource.write_bytes(b'archive');mods[resource.name]={'archive':str(resource),'members':['edit.bin'],'enabled':True,'status':'INDEXED'}
+            be.record_json(work/'settings.json',{'complete_content_pipeline':False}) # This fixture isolates legacy route staging.
             baseline=work/'recovery_state.json';be.record_json(baseline,{'installationPaused':False,'baselineId':'test','gameRoot':str(game),'hashes':{str(forge):be.sha256(forge)}})
             def analyze(selected,view,toolkit,run_dir,**kwargs):
                 self.assertEqual((view/forge.name).read_bytes(),b'UNLOCK')

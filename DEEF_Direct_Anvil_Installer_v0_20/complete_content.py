@@ -56,6 +56,16 @@ def identity(file):
     return struct.unpack_from('<QI',raw,1)
 
 
+def resolve_weapon_reader(config,mods):
+    helper=Path(config.get('wabo_compatibility_tool') or '')
+    if helper.is_file():return str(helper)
+    candidates=[Path(m['archive']) for m in mods.values() if m.get('enabled',True) and Path(m['archive']).name.casefold().startswith('wabo compatibility tool-')]
+    supported=[p for p in candidates if p.is_file() and be.sha256(p)=='3c2e0f6375407609101850e35dc2997bc06d513dcc434c3cf69b40fc2c2c1f7a']
+    if not supported:
+        raise ValueError('Complete weapon merging requires the supported WABO Compatibility Tool 1.1.2 ZIP. Add it to the mod archives folder (it is read as a tool, never installed into the game). No legacy fallback or game changes were performed.')
+    return str(supported[0])
+
+
 def cache_key(forge,source_hash,request,parent=None):
     rows=[{'name':r['name'],'sha256':be.sha256(r['payload'])} for r in request]
     for entry,row in zip(request,rows):row.update({k:entry.get(k) for k in ('priority','mod','member','exclusive')})
@@ -89,11 +99,11 @@ def verified_loose(mods,game):
 def merge_weapons(items,run,config,stock=None):
     from weapon_stats_merge import AuthorReader,merge,FIELDS
     import conflict_policy as cp
-    reader=AuthorReader(config['wabo_compatibility_tool'])
     grouped=defaultdict(list);others=[];proofs=[]
     for item in items:
         if item['name'].lower().endswith('.gr_weapondbentry'):grouped[identity(payload(item))].append(item)
         else:others.append(item)
+    reader=AuthorReader(config['wabo_compatibility_tool']) if grouped else None
     for n,(id_,group) in enumerate(sorted(grouped.items())):
         if len(group)==1:
             item=group[0]
@@ -165,12 +175,19 @@ def merge_weapons(items,run,config,stock=None):
 
 def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None):
     cfg=mm.load(mm.CONFIG,{})
-    if not cfg.get('complete_content_pipeline'):return mods,[]
+    if not cfg.get('complete_content_pipeline'):
+        log('Complete-content composition explicitly disabled in settings; using legacy resource mapping.')
+        return mods,[]
+    log('Complete-content pipeline enabled: composing authored containers and table merges before characterizing remaining resources.')
     import conflict_policy as cp
     cp.settings(cfg)
     be.record_json(Path(run)/'CONFLICT_PRIORITIES.json',cp.settings(cfg))
     be.record_json(Path(run)/'GAMEPLAY_SETTINGS.json',{key:cfg.get(key) for key in ('wabo_difficulty','weapon_damage_priority','shotgun_damage_profile','lmg_accuracy_profile','ammo_capacity_profile','suppressor_profile','preserve_game_sensitivity','preserve_player_automatic_fire','npc_trigger_priority','foliage_profile','item_wheel_variant')})
     outer,inner=inventory(mods);updated=copy.deepcopy(mods);layers=[]
+    if any(i['name'].casefold().endswith('.gr_weapondbentry') for group in inner.values() for i in group):
+        reader=resolve_weapon_reader(cfg,mods)
+        if reader!=cfg.get('wabo_compatibility_tool'):log('Discovered supported weapon compatibility reader in the selected archives.')
+        cfg['wabo_compatibility_tool']=reader
     dll=be.build_bridge(toolkit,log)
     stock={}
     dbkey=('DataPC_patch_01.forge','dbcontainerentry_0x104634f921.data')
