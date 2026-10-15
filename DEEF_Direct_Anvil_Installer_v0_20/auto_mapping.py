@@ -393,6 +393,10 @@ def analyze(mods, game_root, toolkit, *, run_dir, inspect=None, log=lambda s:Non
         log('Conflict resolver: excluded {} competing verified routes by explicit user choice.\n'.format(chosen_count))
     for issue in invalid_choices:
         log('Conflict resolver: stale/invalid selection ignored: '+issue+'\n')
+    import conflict_policy
+    ordered=conflict_policy.apply_route_priorities(docs['entries'],mm.load(mm.CONFIG,{}),Path(run_dir).parent)
+    docs['prioritySelectionsExcluded']=ordered
+    if ordered:log('Saved priorities: excluded {} competing verified routes.\n'.format(ordered))
     # Known conflicts: only one mod may replace each target. No implicit last-wins order.
     destinations=collections.defaultdict(list)
     for row in docs['entries']:

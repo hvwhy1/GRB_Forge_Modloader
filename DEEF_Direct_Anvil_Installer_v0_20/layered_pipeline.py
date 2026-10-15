@@ -157,6 +157,8 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
             notify=print,inspect=None,game_check=be.game_processes_running,full_game_scan=False):
     import auto_mapping
     baseline=policy.require_ready(game);game=Path(game).resolve();toolkit=Path(toolkit).resolve()
+    import conflict_policy
+    initial_settings=conflict_policy.build_settings(mm.load(mm.CONFIG,{}))
     run=mm.WORK/'auto_runs'/(time.strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:6]+'_layered')
     run.mkdir(parents=True)
     report={'schema':'DEEF.layered_setup.20','state':'PREPARING_FOUNDATIONS','game':str(game),
@@ -256,6 +258,11 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
         details.setdefault('entries',[]).extend({'archive':item['mod'],'member':item['member'],'status':'VERIFIED_INSTALLED_LOOSE','explanation':'Selected archive payload already installed and checked by SHA-256'} for item in loose)
         details['entries'].extend({'archive':r['mod'],'member':r['member'],'status':'VERIFIED_STAGED_LOOSE','explanation':'Generated runtime payload independently fingerprinted in the batch'} for r in runtime_contributions)
         details.setdefault('entries',[]).extend({'archive':item['mod'],'member':item['member'],'status':'VERIFIED_COMPOSED_CONTENT','explanation':'Exact authored bytes already present in the composed foundation'} for item in present)
+        excluded=mm.load(run/'PRIORITY_EXCLUSIONS.json',[])
+        excluded_keys={(r['mod'],r['member']) for r in excluded}
+        for row in details['entries']:
+            if (row['archive'],row['member']) in excluded_keys:
+                row.update(status='USER_CONFLICT_EXCLUDED',explanation='Excluded by saved resource/mod priority; see composition proof')
         be.record_json(path,details)
         report.update(characterization=str(path),verifiedRoutes=details['verifiedCount'],
                       blockingUnmapped=details['blockingUnmappedCount'],foundationFiles=len(layers))
@@ -277,7 +284,11 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
             be.record_json(run/'RESOURCE_PLAN.json',plan)
             inner=be.stage_plan_stream(plan,run/'resources',log=log,allow_route_exclusions=allow_subset,private_only=True)
             inner_path=run/'resources/BATCH_RESULT.json'
+        import conflict_policy
+        if initial_settings!=conflict_policy.build_settings(mm.load(mm.CONFIG,{})):
+            raise ValueError('Build settings changed during staging. Run Scan and stage again with the final choices.')
         final={'schema':3,'writer':WRITER,'status':'VERIFIED_STAGED','productVersion':policy.VERSION,
+               'buildSettings':initial_settings,
                'baselineId':baseline['baselineId'],'buildScope':'ENABLED_MOD_SELECTION',
                'selectedArchives':[key for key,mod in original_mods.items() if mod.get('enabled',True)],'installationOrder':list(PHASES),'foundationLayers':layers,
                'resourceManifest':str(inner_path) if inner_path else None,'runtimeManifest':runtime_receipt,

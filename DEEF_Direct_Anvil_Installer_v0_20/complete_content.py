@@ -58,9 +58,10 @@ def identity(file):
 
 def cache_key(forge,source_hash,request,parent=None):
     rows=[{'name':r['name'],'sha256':be.sha256(r['payload'])} for r in request]
+    for entry,row in zip(request,rows):row.update({k:entry.get(k) for k in ('priority','mod','member','exclusive')})
     if parent:
         for entry,row in zip(request,rows):row.update({k:entry.get(k) for k in ('allowNameAlias','allowTypeChange','npcTriggerPriority','operation')})
-    revision='PACKED_CHECKSUM_AND_CONSECUTIVE_SET_LAYOUT_3' if parent else 'PACKED_CHECKSUM_AND_OVERRIDE_FIRST_SET_LAYOUT_4'
+    revision='PRIORITY_AND_SCHEMA_MERGES_5' if parent else 'CONTAINER_UNION_AND_PRIORITIES_5'
     return hashlib.sha256(json.dumps({'writerRevision':revision,'forge':forge,'source':source_hash,'parent':parent,'rows':rows},sort_keys=True).encode()).hexdigest()
 
 
@@ -87,6 +88,7 @@ def verified_loose(mods,game):
 
 def merge_weapons(items,run,config,stock=None):
     from weapon_stats_merge import AuthorReader,merge,FIELDS
+    import conflict_policy as cp
     reader=AuthorReader(config['wabo_compatibility_tool'])
     grouped=defaultdict(list);others=[];proofs=[]
     for item in items:
@@ -104,13 +106,19 @@ def merge_weapons(items,run,config,stock=None):
         wabo=[i for i in group if '-1585-' in i['mod']]
         damage=[i for i in group if '-1204-' in i['mod']]
         other=[i for i in group if i not in cosmetic+wabo+damage]
-        base=(cosmetic or other or wabo or damage)[0]
+        bases=cosmetic+other or wabo or damage
+        base=bases[0];explicit_base=False
+        if len(bases)>1 and len({be.sha256(payload(i)) for i in bases})>1:
+            base=cp.inspect_group(bases,config,'DataPC_patch_01.forge','DBContainerEntry_0X104634F921.data',run)
+            if base is None:raise ValueError('Competing weapon layouts need an explicit priority: '+bases[0]['name'])
+            explicit_base=True
         donors=[]
         if wabo and base not in wabo:donors.append((payload(wabo[0]),FIELDS))
         if damage and config.get('weapon_damage_priority','Damage Balance')=='Damage Balance':donors.append((payload(damage[0]),{'damage'}))
+        extra,field_choices=cp.field_donors(group,config,payload);donors.extend(extra)
         if not donors:
             hashes={be.sha256(payload(i)) for i in group}
-            if len(hashes)>1 and len(group)>1:raise ValueError('Unresolved weapon merge: '+base['name'])
+            if len(hashes)>1 and len(group)>1 and not explicit_base:raise ValueError('Unresolved weapon merge: '+base['name'])
             merged=dict(base)
         else:
             out=run/'WeaponMerges'/str(n)/base['name']
@@ -118,8 +126,13 @@ def merge_weapons(items,run,config,stock=None):
                 from weapon_stats_merge import merge_damage
                 proof=merge_damage(reader,payload(base),donors[0][0],out)
             else:proof=merge(reader,payload(base),donors,out)
+            proof['fieldPriorities']=field_choices
             be.record_json(out.with_suffix('.MERGE.json'),proof);proofs.append({'members':[(i['mod'],i['member']) for i in group],'proof':str(out.with_suffix('.MERGE.json'))})
             merged=dict(base,payload=str(out))
+        used={be.sha256(payload(base))}|{be.sha256(path) for path,_ in donors}
+        excluded=[{'mod':i['mod'],'member':i['member']} for i in group if be.sha256(payload(i)) not in used]
+        if excluded:
+            path=run/'PRIORITY_EXCLUSIONS.json';be.record_json(path,mm.load(path,[])+excluded)
         merged['contributions']=[(i['mod'],i['member']) for i in group];others.append(merged)
         merged['donorArchives']=[i['archive'] for i in group]
     if stock and config.get('preserve_game_sensitivity',True):
@@ -153,6 +166,9 @@ def merge_weapons(items,run,config,stock=None):
 def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None):
     cfg=mm.load(mm.CONFIG,{})
     if not cfg.get('complete_content_pipeline'):return mods,[]
+    import conflict_policy as cp
+    cp.settings(cfg)
+    be.record_json(Path(run)/'CONFLICT_PRIORITIES.json',cp.settings(cfg))
     be.record_json(Path(run)/'GAMEPLAY_SETTINGS.json',{key:cfg.get(key) for key in ('wabo_difficulty','weapon_damage_priority','shotgun_damage_profile','lmg_accuracy_profile','ammo_capacity_profile','suppressor_profile','preserve_game_sensitivity','preserve_player_automatic_fire','npc_trigger_priority','foliage_profile','item_wheel_variant')})
     outer,inner=inventory(mods);updated=copy.deepcopy(mods);layers=[]
     dll=be.build_bridge(toolkit,log)
@@ -168,13 +184,18 @@ def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None):
         nonlocal seq
         seq+=1;folder=run/'CompleteContents'/str(seq);folder.mkdir(parents=True)
         source=view/forge;req=[];covered=defaultdict(list);archives={}
+        named=defaultdict(list)
+        for item in items:named[logical(item['name'])].append(item)
+        for group in named.values():
+            if len(group)>1:cp.inspect_group(group,cfg,forge,parent,run)
         for item in items:
             path=payload(item)
             if '-1159-' in item['mod'] and logical(item['name'])=='dbbooleanstatdescriptor_canusewhitehot.dbbooleanstatdescriptor':
                 from payload_repairs import repair
                 path=repair(path,run/'PayloadRepairs'/item['name'],'white_hot_identity')
             currency_change=('-537-' in item['mod'] and logical(item['name'])=='dblootableset_goliath_exploded.dblootablecurrency') or '-1585-' in item['mod']
-            req.append({'name':item['name'],'payload':str(path),'operation':item.get('operation','replace'),'allowNameAlias':'-1585-' in item['mod'],'allowTypeChange':currency_change,'npcTriggerPriority':cfg.get('npc_trigger_priority','Various Tweaks single trigger')})
+            rank=cp.priority(item,cfg,forge,parent)
+            req.append({'name':item['name'],'payload':str(path),'operation':item.get('operation','replace'),'allowNameAlias':'-1585-' in item['mod'],'allowTypeChange':currency_change,'npcTriggerPriority':cfg.get('npc_trigger_priority','Various Tweaks single trigger'),'priority':rank,'exclusive':rank==1000000,'mod':item['mod'],'member':item['member']})
             for key,member in item.get('contributions',[(item['mod'],item['member'])]):covered[key].append(member)
             for archive in [item['archive']]+item.get('donorArchives',[]):
                 if archive not in archive_hashes:archive_hashes[archive]=be.sha256(archive)
@@ -200,11 +221,19 @@ def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None):
         if result is None:
             with (folder/'CONSOLE.txt').open('w',encoding='utf-8') as f:p=subprocess.run(command,stdout=f,stderr=subprocess.STDOUT)
             result=json.loads(proof.read_text(encoding='utf-8')) if proof.is_file() else {}
+            if parent is None:cp.container_groups(run,forge,folder,items)
             if p.returncode or result.get('verified') is not True:raise ValueError('Complete content composition failed: '+str(proof)+' : '+str(result.get('error',''))[-450:])
             cache_file.parent.mkdir(parents=True,exist_ok=True)
             cache[key]={'proof':str(proof),'output':result['output']};mm.save(cache_file,cache)
+        if parent is None and result.get('reusedVerifiedProof'):
+            cp.container_groups(run,forge,Path(result['reusedVerifiedProof']).parent,items)
         output=Path(result['output']);target=str(game/forge);digest=be.sha256(output)
+        exclusions=[item for row in result.get('rows',[]) for item in row.get('excluded',[])]
+        if exclusions:
+            path=run/'PRIORITY_EXCLUSIONS.json';previous=mm.load(path,[])
+            be.record_json(path,previous+exclusions)
         if result['sourceSha256'].casefold()!=current[target] or result['outputSha256'].casefold()!=digest:raise ValueError('Content composition hash chain differs')
+        cp.completed(run,forge,parent,proof,mm.load(run/'PRIORITY_EXCLUSIONS.json',[]))
         index=forge_audit.read_index(output)
         layer={'mod':'Complete selected content','archive':items[0]['archive'],'archiveSha256':archives[items[0]['archive']],
             'sourceArchives':archives,'member':'COMPLETE_CONTENT_'+str(seq),'forge':target,'kind':'composed_inner' if parent else 'composed_assets',

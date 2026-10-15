@@ -149,7 +149,12 @@ class App:
         self.button(installbar,'Select a v20 batch',self.select_batch).pack(side='left',padx=(0,8))
         self.button(installbar,'3 - Install reviewed batch',self.install).pack(side='left',padx=8)
         self.button(installbar,'Open reports',lambda:self.open_folder(mm.WORK)).pack(side='left',padx=8)
-        self.button(page,'Review mod completeness',self.review_coverage).pack(anchor='w',pady=8)
+        reviewbar=ttk.Frame(page);reviewbar.pack(fill='x',pady=8)
+        self.button(reviewbar,'Review mod completeness',self.review_coverage).pack(side='left')
+        def priorities():
+            import priorities_ui
+            priorities_ui.show(self.root,self)
+        self.button(reviewbar,'Conflict priorities',priorities).pack(side='left',padx=12)
         ttk.Label(page,text='Build order: prepatched Forge files -> complete Forge mods -> resource edits inside those results. '
                   'Competing whole-file variants are reported. New asset experiments have their own private workspace. Existing complete parents are preserved; '
                   'ambiguous choices remain in the review report. Game compatibility still needs an in-game test.',

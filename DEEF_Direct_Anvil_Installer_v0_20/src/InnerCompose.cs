@@ -4,7 +4,7 @@ using AnvilToolkit.FileTypes.AnvilNext.Containers;
 using AnvilToolkit.Utils;
 
 internal static class InnerCompose {
-    internal sealed class Request {public string name{get;set;}="";public string payload{get;set;}="";public string operation{get;set;}="replace";public bool allowNameAlias{get;set;}public bool allowTypeChange{get;set;}public string npcTriggerPriority{get;set;}="Various Tweaks single trigger";}
+    internal sealed class Request {public string name{get;set;}="";public string payload{get;set;}="";public string operation{get;set;}="replace";public bool allowNameAlias{get;set;}public bool allowTypeChange{get;set;}public string npcTriggerPriority{get;set;}="Various Tweaks single trigger";public bool exclusive{get;set;}public int? priority{get;set;}public string mod{get;set;}="";public string member{get;set;}="";}
     static string Logical(string path) {string n=Path.GetFileName(path);int j=n.IndexOf("_-_",StringComparison.Ordinal);return j>0&&n[..j].All(char.IsDigit)?n[(j+3)..]:n;}
     static bool Resource(string p)=>Path.GetFileName(p).Contains("_-_")&&!new[]{".PrefetchingInfo",".Dependency",".FilterTable",".xml",".Prefab"}.Contains(Path.GetExtension(p),StringComparer.OrdinalIgnoreCase);
     static Dictionary<string,string> IdentityIndex(string folder) {
@@ -38,12 +38,35 @@ internal static class InnerCompose {
             int ordinal=Directory.GetFiles(folder).Select(p=>int.TryParse(Path.GetFileName(p).Split("_-_",2)[0],out int n)?n:0).Max(),added=0;
             var requests=JsonSerializer.Deserialize<Request[]>(File.ReadAllText(request))!;
             var prepared=new List<Request>();
+            bool UsePriority(Request[] variants) {
+                if(!variants.Any(v=>v.exclusive)&&variants.Any(v=>!v.priority.HasValue))return false;
+                var ranked=variants.Where(v=>v.priority.HasValue).ToArray();
+                if(ranked.Length==0)return false;
+                int highest=ranked.Max(v=>v.priority!.Value);
+                var winners=ranked.Where(v=>v.priority==highest).ToArray();
+                if(winners.Select(v=>Trial.Hash(v.payload)).Distinct().Count()!=1)return false;
+                prepared.Add(winners[0]);rows.Add(new{state="EXPLICIT_RESOURCE_PRIORITY",winner=new{winners[0].mod,winners[0].member},excluded=variants.Where(v=>v!=winners[0]).Select(v=>new{v.mod,v.member}),fieldMerge=false});return true;
+            }
+
+            var rejected=new HashSet<Request>();
+            foreach(var group in requests.GroupBy(v=>Logical(v.name),StringComparer.OrdinalIgnoreCase)) {
+                var variants=group.ToArray();
+                if(!variants.Any(v=>v.operation=="remove")||!variants.Any(v=>v.operation=="replace"))continue;
+                var ranked=variants.Where(v=>v.priority.HasValue).ToArray();
+                if(ranked.Length==0||(!variants.Any(v=>v.exclusive)&&variants.Any(v=>!v.priority.HasValue)))throw new IOException("Removal conflicts with a replacement; choose an explicit priority: "+group.Key);
+                int highest=ranked.Max(v=>v.priority!.Value);var winners=ranked.Where(v=>v.priority==highest).ToArray();
+                if(winners.Length!=1)throw new IOException("Removal/replacement priority tie: "+group.Key);
+                foreach(var item in variants.Where(v=>v!=winners[0]))rejected.Add(item);
+                rows.Add(new{state="EXPLICIT_REMOVAL_OR_REPLACEMENT_PRIORITY",winner=new{winners[0].mod,winners[0].member},excluded=variants.Where(v=>v!=winners[0]).Select(v=>new{v.mod,v.member})});
+            }
+            requests=requests.Where(v=>!rejected.Contains(v)).ToArray();
             foreach(var group in requests.Where(i=>i.operation=="replace").GroupBy(i=>HeadlessToolkit.Identity(i.payload))) {
                 var variants=group.ToArray();
                 if(variants.Length==1||variants.Select(i=>Trial.Hash(i.payload)).Distinct().Count()==1){prepared.AddRange(variants);continue;}
-                if(!byId.TryGetValue(group.Key,out var originalMatches)||originalMatches.Length!=1)throw new IOException("Conflicting new/ambiguous inner resource: "+variants[0].name);
+                if(variants.Any(v=>v.exclusive)){if(UsePriority(variants))continue;throw new IOException("Competing exact resource choices");}
+                if(!byId.TryGetValue(group.Key,out var originalMatches)||originalMatches.Length!=1) {if(!byId.ContainsKey(group.Key)&&UsePriority(variants))continue;throw new IOException("Conflicting new/ambiguous inner resource: "+variants[0].name);}
                 byte[] baseline=File.ReadAllBytes(originalMatches[0]);var data=variants.Select(i=>File.ReadAllBytes(i.payload)).ToArray();
-                if(data.Any(b=>b.Length!=baseline.Length||!b.AsSpan(0,13).SequenceEqual(baseline.AsSpan(0,13))))throw new IOException("Conflicting inner schemas: "+variants[0].name);
+                if(data.Any(b=>b.Length!=baseline.Length||!b.AsSpan(0,13).SequenceEqual(baseline.AsSpan(0,13)))) {if(UsePriority(variants))continue;throw new IOException("Conflicting inner schemas: "+variants[0].name);}
                 bool Satisfies(byte[] candidate)=>data.All(incoming=>Enumerable.Range(0,baseline.Length).All(i=>incoming[i]==baseline[i]||candidate[i]==incoming[i]));
                 int winner=Array.FindIndex(data,Satisfies);
                 if(winner>=0) {
@@ -68,7 +91,8 @@ internal static class InnerCompose {
                     prepared.Add(new Request{name=variants[other].name,payload=merged});
                     rows.Add(new{state="AAC_MAGAZINE_AND_TRIGGER_REFERENCE_MERGE",names=variants.Select(v=>v.name).ToArray(),magazineOffset=56,triggerOffset=101,bothReferenceTargetClassesVerified=true,baselineSha256=Trial.Hash(originalMatches[0]),mergedSha256=Trial.Hash(merged)});continue;
                 }
-                throw new IOException("COMPETING_INNER_PAYLOADS_REQUIRE_FIELD_MERGE: "+variants[0].name);
+                if(UsePriority(variants))continue;
+                throw new IOException("COMPETING_INNER_PAYLOADS_REQUIRE_FIELD_MERGE_OR_PRIORITY: "+variants[0].name);
             }
             foreach(var item in requests.Where(i=>i.operation!="replace")) {
                 // Narrow author-documented removal: disabling forced cover.

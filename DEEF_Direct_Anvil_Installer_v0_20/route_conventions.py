@@ -57,7 +57,8 @@ def parse_explicit_parent(member):
         is_legacy=not name.casefold().endswith('.forge')
         rest=[p for p in parts[i+1:] if p.casefold()!='extracted']
         if not rest:continue
-        if rest[0].casefold()=='dbcontainer' and len(rest)==2:
+        db_alias=re.fullmatch(r'(?:\d+_-_)?(?:DBContainer|DBContainerEntry(?:_0X104634F921)?)',rest[0],re.I)
+        if db_alias and len(rest)==2 and forge_name.casefold()=='datapc_patch_01.forge':
             rest=['DBContainerEntry_0X104634F921.data',rest[1]]
         positions=[j for j,value in enumerate(rest) if DATA_PATTERN.fullmatch(parent_data_label(value)[0])]
         if positions and len(rest)-positions[0] in (1,2):

@@ -89,6 +89,16 @@ def require_install(state, manifest):
     if state.get('productVersion') != VERSION or state.get('baselineId') != baseline['baselineId']:
         raise ValueError('Stage belongs to an older build or baseline; scan and stage again in v20.')
     if state.get('writer')=='FORGE_LAYERED_BATCH_V20':
+        import mod_manager as mm
+        if (mm.WORK/'mods.json').is_file() and 'selectedArchives' in state:
+            current=mm.load(mm.STATE,{})
+            selected={key for key,mod in current.items() if mod.get('enabled',True)}
+            if selected!=set(state['selectedArchives']):
+                raise ValueError('Mod selection changed after staging. Scan and stage a new batch before installing.')
+        if 'buildSettings' in state:
+            import conflict_policy
+            if state['buildSettings']!=conflict_policy.build_settings(mm.load(mm.CONFIG,{})):
+                raise ValueError('Priorities or gameplay/runtime settings changed after staging. Scan and stage a new batch before installing.')
         import layered_pipeline
         layered_pipeline.inspect_stage(manifest,baseline['gameRoot'])
     elif (WORK/'mods.json').is_file():
