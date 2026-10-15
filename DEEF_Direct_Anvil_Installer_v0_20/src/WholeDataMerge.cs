@@ -39,8 +39,13 @@ internal static class WholeDataMerge {
                 File.Copy(payload,dest,false);added++;continue;
             }
             if(matches.Length!=1)throw new IOException("WHOLE_DATA_AMBIGUOUS_BINARY_ID: "+Path.GetFileName(payload));
-            if(!Name(matches[0]).Equals(Name(payload),StringComparison.OrdinalIgnoreCase))
-                throw new IOException("WHOLE_DATA_ID_NAME_MISMATCH: "+Name(payload));
+            if(!Name(matches[0]).Equals(Name(payload),StringComparison.OrdinalIgnoreCase)) {
+                if(!allowNew)throw new IOException("WHOLE_DATA_ID_NAME_MISMATCH: "+Name(payload));
+                // Authors rename reskinned objects without changing their binary
+                // identity. A single ID+type match is required on both sides;
+                // keep the original slot/name and verify every byte after packing.
+                Console.WriteLine($"INNER_FILENAME_ALIAS_UNIQUE_ID_TYPE_VERIFIED: {Name(payload)} -> {Name(matches[0])}; {identity.Item1:X16}:{identity.Item2:X8}");
+            }
             File.Copy(payload,matches[0],true);
         }
         Console.WriteLine($"Whole parent: {added} verified new identities requested.");
@@ -62,5 +67,26 @@ internal static class WholeDataMerge {
             throw new IOException("Whole-container merge readback changed resources or original metadata");
         Console.WriteLine($"Merged complete parent: {merge.replaced} supplied objects, {merge.preserved} original objects preserved.");
         return packed;
+    }
+    internal static int RunTrial(string[] args) {
+        string? report=args.Length==5?Path.GetFullPath(args[4]):null;
+        bool reportAllowed=false;
+        try {
+            if(report==null)throw new IOException("whole-data-merge-trial <toolkit> <original.data> <incoming.data> <report.json>");
+            string original=Path.GetFullPath(args[2]),incoming=Path.GetFullPath(args[3]);
+            if(Trial.Inside(Path.GetDirectoryName(original)!,report)||Trial.Inside(Path.GetDirectoryName(incoming)!,report))throw new IOException("Trial output must be outside input folders");
+            string work=Path.Combine(Path.GetDirectoryName(report)!,"WholeMerge");
+            if(File.Exists(report)||Directory.Exists(work))throw new IOException("Trial requires a fresh output folder");
+            reportAllowed=true;
+            Directory.CreateDirectory(Path.GetDirectoryName(report)!);HeadlessToolkit.InitializeHashes();
+            string sourceHash=Trial.Hash(original),payloadHash=Trial.Hash(incoming);
+            string output=Prepare(original,incoming,work,true);
+            if(Trial.Hash(original)!=sourceHash||Trial.Hash(incoming)!=payloadHash)throw new IOException("Trial input changed");
+            File.WriteAllText(report,System.Text.Json.JsonSerializer.Serialize(new{verified=true,sourceUnchanged=true,payloadUnchanged=true,sourceSha256=sourceHash,payloadSha256=payloadHash,output,outputSha256=Trial.Hash(output),liveGameModified=false}));return 0;
+        }catch(Exception ex) {
+            Console.Error.WriteLine(ex);
+            if(reportAllowed&&report!=null&&!File.Exists(report)){Directory.CreateDirectory(Path.GetDirectoryName(report)!);File.WriteAllText(report,System.Text.Json.JsonSerializer.Serialize(new{verified=false,error=ex.ToString(),liveGameModified=false}));}
+            return 1;
+        }
     }
 }

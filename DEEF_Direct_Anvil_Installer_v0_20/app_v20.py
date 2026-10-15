@@ -164,12 +164,14 @@ class App:
                          ('Stage new assets privately',self.experiments)]:
             self.button(page,label,fn).pack(anchor='w',pady=7)
         self.button(page,'Test missing KS1 / SPEAR assets privately',self.weapon_asset_test).pack(anchor='w',pady=7)
+        self.button(page,'Open operation error reports',lambda:self.open_folder(mm.WORK/'diagnostics'/'errors')).pack(anchor='w',pady=7)
         ttk.Label(page,text='Self-tests exercise private temporary fixtures. A successful hash or Anvil readback does not prove '
                   'that a mod can load in the game. Recovery uses the saved hashes and atomic replacement.',
                   style='Muted.TLabel',wraplength=880).pack(anchor='w',pady=20)
 
     def navigate(self,key,force=False):
         if self.busy and key not in self.loaded and not force:return
+        if key=='review' and not self.busy:self.save_paths()
         if key not in self.loaded:
             if key=='options':
                 import additional_options
@@ -179,6 +181,7 @@ class App:
                 self.save_paths();self.library_page()
             elif key=='review':self.conflicts_page()
             self.loaded.add(key)
+        elif key=='review' and not self.busy:self.refresh_merge_settings()
         self.active_page=key;self.hosts[key].tkraise()
 
     def conflicts_page(self):
@@ -216,6 +219,7 @@ class App:
             for key,mod in sorted(mods.items()):
                 tree.insert('','end',iid=key,values=('ON' if mod.get('enabled',True) else 'OFF',key,
                     len(mod.get('members',[])),mod.get('status','Awaiting scan')))
+            if hasattr(self,'refresh_merge_settings'):self.refresh_merge_settings()
         def refresh():
             folder=self.paths['archive_dir'].get()
             def work():
@@ -271,7 +275,10 @@ class App:
             try:self.events.put(('done',(fn(),done)))
             except Exception as exc:
                 from conflict_flow import StagingCancelled
-                self.events.put(('cancelled' if isinstance(exc,StagingCancelled) else 'error',str(exc)))
+                if isinstance(exc,StagingCancelled):self.events.put(('cancelled',str(exc)))
+                else:
+                    import traceback
+                    self.events.put(('error',traceback.format_exc()))
         threading.Thread(target=worker,daemon=True).start()
 
     def drain(self):
@@ -296,13 +303,22 @@ class App:
                     for widget,previous in self.locked:
                         if widget.winfo_exists():widget.configure(state=previous)
                     if kind=='error':
-                        self.status.set('Operation stopped - '+value);self.notify('ERROR: '+value)
-                        messagebox.showerror('Operation stopped',value,parent=self.root)
+                        import friendly_errors
+                        try:
+                            title,summary,report=friendly_errors.explain(value,mm.WORK)
+                            self.status.set(title+' - details saved in Diagnostics')
+                            self.notify('ERROR: '+value+'\nDiagnostic report: '+str(report))
+                            messagebox.showerror(title,summary+'\n\nFull details: Diagnostics & recovery > Open operation error reports\nReport: '+report.name,parent=self.root)
+                        except OSError:
+                            self.status.set('Operation stopped - diagnostic report could not be saved')
+                            self.notify('ERROR: '+value)
+                            messagebox.showerror('Operation stopped','The operation could not finish. Full details are in the activity log below. The diagnostic report could not be saved; check free disk space and folder permissions.',parent=self.root)
                     elif kind=='cancelled':self.status.set(value);self.notify(value)
                     else:
                         result,done=value
                         self.status.set('Operation complete')
                         if done:done(result)
+                        if hasattr(self,'refresh_merge_settings'):self.refresh_merge_settings()
                     self.refresh_state()
         except queue.Empty:pass
         self.root.after(75,self.drain)

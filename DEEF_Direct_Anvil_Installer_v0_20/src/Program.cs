@@ -27,14 +27,15 @@ internal static class Program
     {
         try
         {
-            if (args.Length >= 2 && new[]{"repair-directory-ranges","uncompressed-data-trial","cached-extract","cached-extract-short","compare-data-parents","schema-export","compose-inner","compose-assets","stream-foundation-parent","stream-format-tests","stream-inspect","stream-stage","stream-stage-data","stream-batch","stream-preflight","stream-add-trial","stream-add-outer-trial","stream-add-inner-batch","stream-pack-new-data","toolkit-add-outer-trial"}.Contains(args[0]))
+            if (args.Length >= 2 && new[]{"whole-data-merge-trial","repair-directory-ranges","uncompressed-data-trial","cached-extract","cached-extract-short","compare-data-parents","schema-export","compose-inner","compose-assets","stream-foundation-parent","stream-format-tests","stream-inspect","stream-stage","stream-stage-data","stream-batch","stream-preflight","stream-add-trial","stream-add-outer-trial","stream-add-inner-batch","stream-pack-new-data","toolkit-add-outer-trial"}.Contains(args[0]))
             {
                 var library = Trial.LoadToolkit(Path.GetFullPath(args[1]));
                 var gameType = library.GetType("AnvilToolkit.Utils.Game", true)!;
                 var game = Enum.Parse(gameType, "GhostReconBreakpoint");
                 Trial.SetToolkitGameContext(library, gameType, game);
                 Trial.ConfigureToolkitOodle(library, Path.GetFullPath(args[1]), game, true);
-                return args[0]=="repair-directory-ranges" ? ForgeDirectoryRepair.Run(args) :
+                return args[0]=="whole-data-merge-trial" ? WholeDataMerge.RunTrial(args) :
+                    args[0]=="repair-directory-ranges" ? ForgeDirectoryRepair.Run(args) :
                     args[0]=="uncompressed-data-trial" ? DataCompressionTrial.Run(args) :
                     (args[0]=="cached-extract" || args[0]=="cached-extract-short") ? CachedDataExtract.Run(args) :
                     args[0]=="compare-data-parents" ? DataParentCompare.Run(args) :

@@ -24,3 +24,5 @@ dotnet build src/AnvilBridgeProbe.csproj -c Release -o bin -p:AnvilToolkitDirect
 Game files, mod archives, third-party binaries, generated builds, local settings, caches, saved stages, and backups remain local and are excluded from this repository. The installer README's saved-setup recovery requires local payloads; normal archive rebuilding is independent of those payloads.
 
 The app is now Forge Assembly. Conflict choices pause and resume private composition; priorities/completeness are on Conflicts & new assets, and reports are under Diagnostics. Keep existing workspace and backup paths when updating. Internal legacy folder and receipt names are retained for compatibility.
+
+Gameplay settings follow the enabled archives actually present in the mod folder. New/changed archives are indexed when opening Conflicts & new assets; learned resource variants remain available for later builds. Readable error summaries link to full diagnostics. The tools ZIP excludes personal settings and local toolkit paths.

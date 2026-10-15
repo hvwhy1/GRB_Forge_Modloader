@@ -71,7 +71,7 @@ def cache_key(forge,source_hash,request,parent=None):
     for entry,row in zip(request,rows):row.update({k:entry.get(k) for k in ('priority','mod','member','exclusive')})
     if parent:
         for entry,row in zip(request,rows):row.update({k:entry.get(k) for k in ('allowNameAlias','allowTypeChange','npcTriggerPriority','operation')})
-    revision='PRIORITY_AND_SCHEMA_MERGES_5' if parent else 'CONTAINER_UNION_AND_PRIORITIES_5'
+    revision='PRIORITY_AND_SCHEMA_MERGES_5' if parent else 'CONTAINER_UNION_AND_PRIORITIES_6'
     return hashlib.sha256(json.dumps({'writerRevision':revision,'forge':forge,'source':source_hash,'parent':parent,'rows':rows},sort_keys=True).encode()).hexdigest()
 
 

@@ -128,7 +128,7 @@ def scan_archives(directory, current=None):
         obj = {
             'archive': str(path), 'relativeArchive': rel, 'enabled': bool(saved.get('enabled', True)),
             '_enabled_by_user':bool(saved.get('_enabled_by_user',False)),
-            'size': path.stat().st_size, 'members': [], 'status': 'UNINDEXED',
+            'size': path.stat().st_size, 'mtimeNs': path.stat().st_mtime_ns, 'members': [], 'status': 'UNINDEXED',
             'routes': saved.get('routes', [])
         }
         try:

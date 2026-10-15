@@ -5,10 +5,11 @@ import tkinter as tk
 from tkinter import ttk,messagebox
 import mod_manager as mm
 import conflict_policy as cp
+import mod_settings as catalog
 
 
 def show(parent,owner,*,report_path=None,on_saved=None,on_cancel=None,resume=False):
- cfg=mm.load(mm.CONFIG,{});policy=copy.deepcopy(cp.settings(cfg));mods=mm.load(mm.STATE,{})
+ cfg=mm.load(mm.CONFIG,{});policy=copy.deepcopy(cp.settings(cfg));mods=catalog.present_mods(cfg)
  active=sorted(k for k,v in mods.items() if v.get('enabled',True))
  order=[k for k in policy.get('mod_order',[]) if k in active]+[k for k in active if k not in policy.get('mod_order',[])]
  win=tk.Toplevel(parent);win.title('Forge Assembly - Conflict priorities');win.geometry('1060x760');win.minsize(820,600)
@@ -17,6 +18,7 @@ def show(parent,owner,*,report_path=None,on_saved=None,on_cancel=None,resume=Fal
  book=ttk.Notebook(win);book.pack(fill='both',expand=True,padx=12,pady=8)
  general=ttk.Frame(book,padding=12);fields=ttk.Frame(book,padding=12);resources=ttk.Frame(book,padding=12)
  book.add(general,text='Mod order');book.add(fields,text='Weapon fields');book.add(resources,text='Resource / variant choices')
+ if not catalog.weapon_donors(mods):book.hide(fields)
  enabled=tk.BooleanVar(value=bool(policy.get('mod_order')))
  ttk.Checkbutton(general,text='Use the ordered mod priorities below for unresolved conflicts',variable=enabled).pack(anchor='w')
  ttk.Label(general,text='Unlisted or tied candidates stay blocked. Known safety holds, prepatch order and selected variants remain in force.',wraplength=960).pack(anchor='w',pady=8)
@@ -32,17 +34,18 @@ def show(parent,owner,*,report_path=None,on_saved=None,on_cancel=None,resume=Fal
  ttk.Button(buttons,text='Move up',command=lambda:move(-1)).pack(side='left')
  ttk.Button(buttons,text='Move down',command=lambda:move(1)).pack(side='left',padx=8)
  ttk.Label(fields,text='Choose a donor for each supported field group. Existing rules preserve the tested WABO / Damage Balance merge. Missing donors are skipped for weapons they do not supply.',wraplength=960).grid(row=0,column=0,columnspan=2,sticky='w',pady=8)
- values=['Existing rules']+active;field_controls={}
+ values=['Existing rules']+catalog.weapon_donors(mods);field_controls={}
  for row,category in enumerate(cp.FIELD_GROUPS,1):
   ttk.Label(fields,text=category.replace('_',' ').title()).grid(row=row,column=0,sticky='w',padx=8,pady=9)
-  var=tk.StringVar(value=policy.get('weapon_fields',{}).get(category) or 'Existing rules');field_controls[category]=var
+  saved=policy.get('weapon_fields',{}).get(category)
+  var=tk.StringVar(value=saved if saved in values else 'Existing rules');field_controls[category]=var
   ttk.Combobox(fields,textvariable=var,values=values,state='readonly',width=76).grid(row=row,column=1,sticky='ew',pady=9)
  fields.columnconfigure(1,weight=1)
  ttk.Label(fields,text='Vanilla sensitivity, shotgun damage and LMG precision controls are applied after these field merges. Unknown binary fields are never guessed.',wraplength=960).grid(row=len(cp.FIELD_GROUPS)+1,column=0,columnspan=2,sticky='w',pady=12)
  reports=[];runs=mm.WORK/'auto_runs'
  if runs.is_dir():reports=[p/'CONFLICT_POLICY_REPORT.json' for p in runs.iterdir() if p.is_dir() and (p/'CONFLICT_POLICY_REPORT.json').is_file()]
  report=Path(report_path) if report_path else (max(reports,key=lambda p:p.stat().st_mtime) if reports else None)
- groups=json.loads(report.read_text()).get('groups',[]) if report else []
+ groups=json.loads(report.read_text()).get('groups',[]) if report_path else catalog.learned_groups(mods)
  if resume:
   groups=[g for g in groups if g['state']!='VERIFIED_COMPOSED']
   book.tab(general,state='disabled');book.tab(fields,state='disabled');book.select(resources)
@@ -50,7 +53,9 @@ def show(parent,owner,*,report_path=None,on_saved=None,on_cancel=None,resume=Fal
  tree=ttk.Treeview(resources,columns=('state',),show='tree headings',height=12);tree.heading('#0',text='Resource');tree.heading('state',text='Resolution');tree.column('#0',width=660);tree.pack(fill='both',expand=True,pady=8)
  by_id={}
  for n,group in enumerate(groups):
-  ident=str(n);by_id[ident]=group;tree.insert('', 'end',iid=ident,text=group.get('label',group['target']),values=(group['state'],))
+  ident=str(n);by_id[ident]=group
+  state='Previously merged - choice can be changed' if group['state']=='VERIFIED_COMPOSED' else 'Choose a variant' if resume else 'Available for next build'
+  tree.insert('', 'end',iid=ident,text=group.get('label',group['target']),values=(state,))
  choice=tk.StringVar();combo=ttk.Combobox(resources,textvariable=choice,state='readonly',width=100);combo.pack(fill='x',pady=4)
  winners=policy.setdefault('resource_winners',{});labels={}
  def select(_=None):
@@ -76,7 +81,7 @@ def show(parent,owner,*,report_path=None,on_saved=None,on_cancel=None,resume=Fal
   else:winners.pop(group['target'],None)
   tree.set(selected[0],'state','Selected for next build' if row else 'Automatic merge / mod order')
  ttk.Button(resources,text='Set selected resource choice',command=choose).pack(anchor='w',pady=4)
- ttk.Label(resources,text=str(report) if report else 'Run Scan & stage to discover resource conflicts.',wraplength=960).pack(anchor='w',pady=8)
+ ttk.Label(resources,text='Discovered choices from previous scans, filtered to enabled mods currently in your folder. Refresh mod settings after adding archives.' if not resume else 'Choose the waiting variant below to resume this build.',wraplength=960).pack(anchor='w',pady=8)
  def save():
   choose()
   if resume:
@@ -84,7 +89,7 @@ def show(parent,owner,*,report_path=None,on_saved=None,on_cancel=None,resume=Fal
    if missing:messagebox.showinfo('Choose a variant','Select an exact winner for each waiting resource, then continue.',parent=win);return
   else:
    policy['mod_order']=list(listing.get(0,'end')) if enabled.get() else []
-   policy['weapon_fields']={k:v.get() for k,v in field_controls.items() if v.get()!='Existing rules'}
+   if catalog.weapon_donors(mods):policy['weapon_fields']={k:v.get() for k,v in field_controls.items() if v.get()!='Existing rules'}
   updated=mm.load(mm.CONFIG,{});updated['conflict_priorities']=policy;cp.settings(updated);mm.save(mm.CONFIG,updated)
   owner.status.set('Conflict choice saved - resuming build' if resume else 'Priorities saved - run Scan & stage to apply them');win.destroy()
   if on_saved:on_saved()

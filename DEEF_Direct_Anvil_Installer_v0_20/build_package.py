@@ -14,10 +14,11 @@ def package():
         for pattern in patterns:files.update((ROOT/folder).glob(pattern))
     files.update((ROOT/'workspace/diagnostics').glob('*.json'))
     files.update((ROOT/'workspace/private_validation').glob('*.json'))
-    for name in ('settings.json','additional_options.json'):
-        if (ROOT/'workspace'/name).is_file():files.add(ROOT/'workspace'/name)
+    # Personal preferences, archive winners and toolkit paths must not become
+    # another computer's starting state. Defaults are supplied by the source.
+    files.discard(ROOT/'data/local_toolkit.json')
     if (ROOT/'workspace/quarantined_stages.json').is_file():files.add(ROOT/'workspace/quarantined_stages.json')
-    manifest={'version':'20.0.0','product':'Forge Assembly','buildRevision':'interactive-conflict-checkpoints','launcher':'START_FORGE_ASSEMBLY.cmd','gameFilesIncluded':False,
+    manifest={'version':'20.0.0','product':'Forge Assembly','buildRevision':'folder-aware-settings-and-readable-errors','launcher':'START_FORGE_ASSEMBLY.cmd','gameFilesIncluded':False,
               'files':{p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
                        for p in sorted(files)}}
     (ROOT/'BUILD_MANIFEST.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
@@ -27,6 +28,7 @@ def package():
     with zipfile.ZipFile(target) as z:
         assert z.testzip() is None
         assert len([n for n in z.namelist() if n.lower().endswith('.cmd')])==1
+        assert not any(n.endswith(('/workspace/settings.json','/workspace/additional_options.json','/data/local_toolkit.json')) for n in z.namelist())
     print(json.dumps({'zip':str(target),'bytes':target.stat().st_size,'files':len(files)+1}))
     return target
 

@@ -213,6 +213,8 @@ def reshade_panel(parent,owner):
 
 
 def merge_panel(parent,owner):
+    import mod_settings as catalog
+    import conflict_policy as cp
     container=ttk.Frame(parent);container.pack(fill='both',expand=True)
     fixed=ttk.Frame(container,padding=(14,8));fixed.pack(fill='x')
     canvas=tk.Canvas(container,bg='#111827',highlightthickness=0)
@@ -221,33 +223,70 @@ def merge_panel(parent,owner):
     frame=ttk.Frame(canvas,padding=14);window=canvas.create_window((0,0),window=frame,anchor='nw');frame.columnconfigure(1,weight=1)
     frame.bind('<Configure>',lambda _:canvas.configure(scrollregion=canvas.bbox('all')))
     canvas.bind('<Configure>',lambda event:canvas.itemconfigure(window,width=event.width))
-    cfg=mm.load(mm.CONFIG,{})
-    options=[('weapon_damage_priority','Weapon damage in merged files',['Damage Balance','WABO'],'Damage Balance'),
-        ('wabo_difficulty','WABO difficulty',['1_Easy','2_Normal','3_Hard','4_Realistic (Hardcore)'],'4_Realistic (Hardcore)'),
-        ('thermal_priority','Thermal vision',['Standard night vision and thermal','Pathfinder white thermal vision','Disable thermal vision'],'Standard night vision and thermal'),
-        ('item_wheel_variant','Item wheel',['Vanilla item wheel','Syringe and Binoculars','Syringe and Breaching torch'],'Vanilla item wheel'),
-        ('nightmare_caller_priority','Nightmare caller resources',['New Reinforcements','Traffic Improvements'],'New Reinforcements'),
-        ('preserve_game_sensitivity','Sensitivity / optic FOV',['Game settings','Mod settings'],'Game settings'),
-        ('foliage_profile','Enemy vision / concealment',['Mod settings','Vanilla concealment'],'Vanilla concealment'),
-        ('npc_trigger_priority','Vehicle / NPC trigger rules',['Vanilla automatic fire','Various Tweaks single trigger'],'Vanilla automatic fire'),
-        ('bcm_handguard','BCM Koblin handguard',['Black','FDE'],'Black'),
-        ('ammo_capacity_profile','Ammo reserve',['Difficulty preset','Vanilla'],'Vanilla'),
-        ('suppressor_profile','Suppressed detection',['Difficulty preset','Vanilla-like'],'Vanilla-like'),
-        ('lmg_accuracy_profile','LMG firing accuracy',['Original','Precision'],'Original'),
-        ('shotgun_damage_profile','Player shotgun damage',['Author values','100','125','150','175','200'],'150')]
-    controls={}
-    ttk.Label(frame,text='Merge priorities for future builds',font=('Segoe UI Semibold',14)).grid(row=0,column=0,columnspan=2,sticky='w',pady=(0,14))
-    for row,(key,label,values,default) in enumerate(options,1):
-        controls[key]=tk.StringVar(value=('Game settings' if cfg.get(key,True) else 'Mod settings') if key=='preserve_game_sensitivity' else cfg.get(key,default))
-        ttk.Label(frame,text=label).grid(row=row,column=0,sticky='w',padx=(0,12),pady=8)
-        ttk.Combobox(frame,textvariable=controls[key],values=values,state='readonly',width=35).grid(row=row,column=1,sticky='ew',pady=8)
-    controls['preserve_night_vision']=tk.BooleanVar(value=cfg.get('preserve_night_vision',True))
-    ttk.Checkbutton(frame,text='Keep normal night vision alongside white-hot vision',variable=controls['preserve_night_vision']).grid(row=len(options)+1,column=0,columnspan=2,sticky='w',pady=8)
+    controls={};variant_controls={}
+    def draw():
+        for child in frame.winfo_children():child.destroy()
+        controls.clear();variant_controls.clear()
+        cfg=mm.load(mm.CONFIG,{})
+        # Paths can be changed before Scan & stage. Never use the previous folder.
+        if hasattr(owner,'paths'):cfg['archive_dir']=owner.paths['archive_dir'].get()
+        mods=catalog.present_mods(cfg);options=catalog.options(mods)
+        ttk.Label(frame,text='Settings for your enabled mods',font=('Segoe UI Semibold',14)).grid(row=0,column=0,columnspan=2,sticky='w',pady=(0,8))
+        ttk.Label(frame,text='Only settings supported by archives in this folder are shown. Disabled mods are hidden. Refresh after adding archives; hidden preferences are retained.',wraplength=740).grid(row=1,column=0,columnspan=2,sticky='w',pady=(0,12))
+        row=2
+        for key,label,values,default in options:
+            saved=('Game settings' if cfg.get(key,True) else 'Mod settings') if key=='preserve_game_sensitivity' else str(cfg.get(key,default))
+            controls[key]=tk.StringVar(value=saved if saved in values else (default if default in values else values[0]))
+            ttk.Label(frame,text=label).grid(row=row,column=0,sticky='w',padx=(0,12),pady=8)
+            ttk.Combobox(frame,textvariable=controls[key],values=values,state='readonly',width=35).grid(row=row,column=1,sticky='ew',pady=8);row+=1
+        if not options:
+            ttk.Label(frame,text='No gameplay settings detected. Add or enable mods in Mod library, then refresh here.').grid(row=row,column=0,columnspan=2,sticky='w',pady=8);row+=1
+        vision=next((o[2] for o in options if o[0]=='thermal_priority'),[])
+        if 'Pathfinder white thermal vision' in vision:
+            controls['preserve_night_vision']=tk.BooleanVar(value=cfg.get('preserve_night_vision',True))
+            ttk.Checkbutton(frame,text='Keep normal night vision alongside white-hot vision',variable=controls['preserve_night_vision']).grid(row=row,column=0,columnspan=2,sticky='w',pady=8);row+=1
+            ttk.Label(frame,text='White-hot vision may require activating Pathfinder vision once in game. Known incompatible files remain excluded by the compatibility rules.',wraplength=740).grid(row=row,column=0,columnspan=2,sticky='w',pady=8);row+=1
+        groups=catalog.learned_groups(mods)
+        if groups:
+            ttk.Label(frame,text='Discovered mod variants',font=('Segoe UI Semibold',13)).grid(row=row,column=0,columnspan=2,sticky='w',pady=(16,8));row+=1
+            ttk.Label(frame,text='These choices stay available while their mods are present and enabled. Archive hashes are checked again during staging. A changed archive requires a new choice.',wraplength=740).grid(row=row,column=0,columnspan=2,sticky='w');row+=1
+            winners=cp.settings(cfg).get('resource_winners',{})
+            for group in groups:
+                labels={c['mod']+' | '+c['member']:c for c in group['candidates']}
+                selected='Automatic merge / mod order';saved=winners.get(group['target'],{})
+                for label,candidate in labels.items():
+                    if all(saved.get(k)==candidate.get(k) for k in ('mod','member','archiveSha256')):selected=label
+                var=tk.StringVar(value=selected);variant_controls[group['target']]=(var,labels)
+                ttk.Label(frame,text=group.get('label',group['target']),wraplength=740).grid(row=row,column=0,columnspan=2,sticky='w',pady=(12,4));row+=1
+                ttk.Combobox(frame,textvariable=var,values=['Automatic merge / mod order']+list(labels),state='readonly',width=70).grid(row=row,column=0,columnspan=2,sticky='ew');row+=1
+        ttk.Label(frame,text='Save these choices before Scan & stage. Changes apply to the next build. Existing staged batches and the installed game are not changed here.',wraplength=740).grid(row=row,column=0,columnspan=2,sticky='w',pady=16)
+        if catalog.needs_refresh(cfg) and not getattr(owner,'busy',False):
+            owner.root.after_idle(refresh)
     def save():
-        config=mm.load(mm.CONFIG,{});config.update({k:v.get() for k,v in controls.items()});config['preserve_game_sensitivity']=controls['preserve_game_sensitivity'].get()=='Game settings';mm.save(mm.CONFIG,config)
-        owner.status.set('Merge choices saved - scan and stage a new build to apply them')
+        import copy
+        config=mm.load(mm.CONFIG,{});config.update({k:v.get() for k,v in controls.items()})
+        if 'preserve_game_sensitivity' in controls:config['preserve_game_sensitivity']=controls['preserve_game_sensitivity'].get()=='Game settings'
+        policy=copy.deepcopy(cp.settings(config));winners=policy.setdefault('resource_winners',{})
+        for target,(var,labels) in variant_controls.items():
+            choice=labels.get(var.get())
+            if choice:
+                pairs={(c['mod'],c['member']) for c in labels.values()}
+                for old,value in list(winners.items()):
+                    if old!=target and (value.get('mod'),value.get('member')) in pairs:winners.pop(old)
+                winners[target]={k:choice[k] for k in ('mod','member','archiveSha256')}
+            else:winners.pop(target,None)
+        config['conflict_priorities']=policy;mm.save(mm.CONFIG,config)
+        owner.status.set('Mod settings saved - scan and stage a new build to apply them')
+    def refresh():
+        if getattr(owner,'busy',False):return
+        owner.save_paths()
+        folder=owner.paths['archive_dir'].get()
+        def work():
+            mods=mm.scan_archives(folder,mm.load(mm.STATE,{}));mm.save(mm.STATE,mods);return mods
+        owner.task(work,lambda _:draw())
     owner.button(fixed,'Save merge options',save,True).pack(side='left')
-    ttk.Label(fixed,text='Save, then scan and stage to apply these choices.').pack(side='left',padx=12)
-    ttk.Label(frame,text='White-hot vision: after installation, switch to Pathfinder once and activate its vision, then switch back to your preferred class. The author recommends this if white-hot does not appear. The white-hot-only files disable ordinary thermal and, unless checked above, green night vision.',wraplength=740).grid(row=len(options)+3,column=0,columnspan=2,sticky='w',pady=8)
-    ttk.Label(frame,text='Damage Balance preserves its damage values while WABO supplies ballistics and handling. Precision LMGs use the existing HTI spread pattern and sway 0.2, preserving recoil, damage, models and attachments. The unsupported T95 bivouac definition is preserved. Vanilla ammo/suppressors use the author optional presets without changing Hardcore health. Vanilla concealment restores the original vision and bush definitions; gameplay still determines which foliage occludes sight. Incompatible wheel swaps are held as a complete group. Saved choices affect a new scan/stage, not an already installed or staged build.',wraplength=740).grid(row=len(options)+4,column=0,columnspan=2,sticky='w',pady=8)
+    owner.button(fixed,'Refresh mod settings',refresh).pack(side='left',padx=10)
+    owner.refresh_merge_settings=draw
+    owner.merge_variant_controls=variant_controls
+    draw()
     return controls

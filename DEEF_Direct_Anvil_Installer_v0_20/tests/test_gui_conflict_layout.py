@@ -1,5 +1,5 @@
 """Private Tk integration: page placement and nonfatal choice/resume/cancel."""
-import json,tempfile,time,tkinter as tk,unittest
+import json,tempfile,time,tkinter as tk,unittest,zipfile
 from pathlib import Path
 from unittest.mock import patch
 from contextlib import ExitStack
@@ -37,7 +37,7 @@ class GuiConflictTests(unittest.TestCase):
      self.assertNotIn('Open reports',texts(app.pages['setup']))
      self.assertIn('Conflict priorities',texts(app.pages['review']))
      self.assertIn('Review mod completeness',texts(app.pages['review']))
-     self.assertIn('Nightmare caller resources',texts(app.pages['review']))
+     self.assertNotIn('Nightmare caller resources',texts(app.pages['review']))
      self.assertNotIn('Radio/Nightmare caller conflicts:',texts(app.pages['library']))
      self.assertIn('Open reports',texts(app.pages['diagnostics']))
     report=work/'CONFLICT_POLICY_REPORT.json'
@@ -69,5 +69,64 @@ class GuiConflictTests(unittest.TestCase):
     root.destroy()
  def test_controls_are_grouped_and_waiting_choice_resumes(self):self.run_case()
  def test_waiting_choice_can_be_cancelled_without_error_popup(self):self.run_case(cancel=True)
+
+ def test_settings_follow_added_removed_and_disabled_archives_and_keep_choices(self):
+  with tempfile.TemporaryDirectory() as d,ExitStack() as stack:
+   folder=Path(d);work=folder/'workspace';work.mkdir();mods=folder/'mods';mods.mkdir()
+   cfg=work/'settings.json';state=work/'mods.json'
+   mm.save(cfg,dict(archive_dir=str(mods),thermal_priority='Pathfinder white thermal vision'))
+   mm.save(state,{})
+   for obj,name,value in ((mm,'WORK',work),(mm,'CONFIG',cfg),(mm,'STATE',state),(policy,'WORK',work),(policy,'STATE',work/'baseline.json')):stack.enter_context(patch.object(obj,name,value))
+   stack.enter_context(patch('tkinter.messagebox.showerror',side_effect=AssertionError('Unexpected error popup')))
+   root=tk.Tk();root.withdraw()
+   try:
+    app=App(root);app.navigate('review')
+    self.assertNotIn('thermal_priority',app.merge_controls)
+    archive=mods/'Nightmare Mode-1102-1.zip'
+    with zipfile.ZipFile(archive,'w') as z:
+     z.writestr('New Reinforcements/A.data',b'A');z.writestr('Traffic Improvements/A.data',b'B')
+    run=work/'auto_runs/old';run.mkdir(parents=True)
+    rows=[dict(mod=archive.name,member=m,archiveSha256=be.sha256(archive)) for m in ('New Reinforcements/A.data','Traffic Improvements/A.data')]
+    be.record_json(run/'CONFLICT_POLICY_REPORT.json',dict(groups=[dict(target='forge||#1:2',state='VERIFIED_COMPOSED',candidates=rows)]))
+    app.navigate('review')
+    deadline=time.monotonic()+8
+    while time.monotonic()<deadline:
+     root.update()
+     if not app.busy and 'nightmare_caller_priority' in app.merge_controls:break
+     time.sleep(.01)
+    self.assertIn('nightmare_caller_priority',app.merge_controls)
+    self.assertIn('forge||#1:2',app.merge_variant_controls)
+    var,labels=app.merge_variant_controls['forge||#1:2'];var.set(list(labels)[-1])
+    next(w for w in widgets(app.pages['review']) if w.winfo_class()=='TButton' and w.cget('text')=='Save merge options').invoke()
+    saved=mm.load(cfg,{});self.assertEqual(saved['thermal_priority'],'Pathfinder white thermal vision')
+    self.assertEqual(saved['conflict_priorities']['resource_winners']['forge||#1:2']['member'],rows[-1]['member'])
+    current=mm.load(state,{});current[archive.name]['enabled']=False;mm.save(state,current)
+    app.navigate('review');self.assertNotIn('nightmare_caller_priority',app.merge_controls);self.assertFalse(app.merge_variant_controls)
+    archive.unlink();app.navigate('review');root.update()
+    deadline=time.monotonic()+5
+    while app.busy and time.monotonic()<deadline:root.update();time.sleep(.01)
+    self.assertFalse(app.merge_controls);self.assertFalse(app.merge_variant_controls)
+   finally:
+    for ident in root.tk.call('after','info'):root.after_cancel(ident)
+    root.destroy()
+
+ def test_worker_error_shows_readable_message_and_records_technical_details(self):
+  with tempfile.TemporaryDirectory() as d,ExitStack() as stack:
+   work=Path(d);cfg=work/'settings.json';state=work/'mods.json';mm.save(cfg,dict(archive_dir=str(work/'mods')));mm.save(state,{})
+   for obj,name,value in ((mm,'WORK',work),(mm,'CONFIG',cfg),(mm,'STATE',state),(policy,'WORK',work),(policy,'STATE',work/'baseline.json')):stack.enter_context(patch.object(obj,name,value))
+   popup=stack.enter_context(patch('tkinter.messagebox.showerror'))
+   root=tk.Tk();root.withdraw()
+   try:
+    app=App(root)
+    def fail():raise RuntimeError('SAME_ARCHIVE_CONTAINER_VARIANTS_NEED_EXACT_CHOICE')
+    app.task(fail);deadline=time.monotonic()+5
+    while app.busy and time.monotonic()<deadline:root.update();time.sleep(.01)
+    self.assertFalse(app.busy);self.assertEqual(popup.call_args.args[0],'Choose which mod should win')
+    self.assertNotIn('Traceback',popup.call_args.args[1]);self.assertNotIn('SAME_ARCHIVE',popup.call_args.args[1])
+    report=next((work/'diagnostics/errors').glob('*.json'))
+    self.assertIn('Traceback',json.loads(report.read_text())['technicalDetails'])
+   finally:
+    for ident in root.tk.call('after','info'):root.after_cancel(ident)
+    root.destroy()
 
 if __name__=='__main__':unittest.main()
