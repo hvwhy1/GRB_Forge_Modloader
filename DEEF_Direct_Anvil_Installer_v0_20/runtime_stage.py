@@ -49,11 +49,17 @@ def prepare(mods,game,run,notify=print):
                 if 'content' in row:text,encoding=row['content'],row.get('encoding','utf-8')
                 else:text,encoding=ci.read_ini(row['source'])
                 row.update(content=ci.patch_ini_values(text,'INPUT',{'KeyOverlay':'36,0,1,0'}),encoding=encoding)
+    import runtime_history
+    cleanup=runtime_history.cleanup(plan,game,cfg)
+    plan.extend(cleanup)
+    if cleanup:notify('Removed-mod runtime cleanup: '+str(len(cleanup))+' recorded files')
     rows=[];seen=set()
     for item in plan:
         target=Path(item['target']).resolve()
-        if not be.within(game,target) or target.suffix.lower() in ('.forge','.data') or target.name.casefold() in ('grb.exe','grb_vulkan.exe') or target in seen:raise ValueError('Invalid or duplicate runtime destination')
+        if not runtime_history.safe_target(game,target) or target in seen:raise ValueError('Invalid or duplicate runtime destination')
         seen.add(target);row=dict(target=str(target),relative=target.relative_to(game).as_posix())
+        if 'expectedSha256' in item:row['expectedSha256']=item['expectedSha256']
+        if item.get('cleanupHistory'):row['cleanupHistory']=item['cleanupHistory']
         if item.get('remove'):row.update(remove=True,expectedSha256=item['expectedSha256'])
         else:
             dest=folder/'Payloads'/target.relative_to(game);dest.parent.mkdir(parents=True,exist_ok=True)
@@ -69,13 +75,14 @@ def prepare(mods,game,run,notify=print):
 
 
 def inspect(receipt,game,batch):
+    import runtime_history
     receipt=Path(receipt).resolve();game=Path(game).resolve();batch=Path(batch).resolve()
     if not be.within(batch,receipt):raise ValueError('Runtime receipt outside batch')
     state=json.loads(receipt.read_text());seen=set()
     if state.get('schema')!='GRB_RUNTIME_STAGE_V20' or Path(state['gameRoot']).resolve()!=game:raise ValueError('Wrong runtime stage')
     for row in state['files']:
         target=Path(row['target']).resolve()
-        if not be.within(game,target) or target.suffix.lower() in ('.forge','.data') or target.name.casefold() in ('grb.exe','grb_vulkan.exe') or target in seen or target.relative_to(game).as_posix()!=row['relative']:raise ValueError('Invalid runtime target')
+        if not runtime_history.safe_target(game,target) or target in seen or target.relative_to(game).as_posix()!=row['relative']:raise ValueError('Invalid runtime target')
         seen.add(target)
         if not row.get('remove'):
             source=Path(row['source']).resolve()

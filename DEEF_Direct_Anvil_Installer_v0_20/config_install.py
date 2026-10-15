@@ -167,12 +167,21 @@ def install_files(plan,game,backups,game_check=be.game_processes_running):
         data=None if item.get('remove') else stream_source if stream_source else item['content'].encode(item.get('encoding','utf-8')) if 'content' in item else Path(item['source']).read_bytes()
         import hashlib
         new=be.sha256(data) if isinstance(data,Path) else hashlib.sha256(data).hexdigest() if data is not None else None
+        if not item.get('remove') and 'expectedSha256' in item and old not in (item['expectedSha256'],new):raise ValueError('Managed runtime file changed; refusing cleanup')
         if item.get('remove') and old is not None and old!=item.get('expectedSha256'):raise ValueError('Loader changed; refusing removal')
         if target.suffix.casefold()=='.dll' and old and old!=new and not item.get('remove') and not item.get('allowProxyReplace'):
             raise ValueError('Existing DLL conflict: '+target.name)
         prepared.append((target,old,new,data))
     folder=backups/('CONFIG_'+time.strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:6]);folder.mkdir(parents=True)
     tx={'status':'PREPARING','gameRoot':str(game),'files':[]}
+    # Keep explicit links to earlier configuration backups for removed-mod cleanup.
+    import mod_manager as mm
+    prior=Path(mm.load(mm.CONFIG,{}).get('last_config_transaction') or '').resolve()
+    if be.within(mm.WORK.resolve(),prior) and prior.is_file():
+        import json
+        document=json.loads(prior.read_text(encoding='utf-8'))
+        if document.get('status')=='INSTALLED' and Path(document.get('gameRoot','')).resolve()==game:
+            tx['previousConfigTransaction']=str(prior)
     receipt=folder/'CONFIG_TRANSACTION.json';swapped=[]
     try:
         for target,old,new,data in prepared:

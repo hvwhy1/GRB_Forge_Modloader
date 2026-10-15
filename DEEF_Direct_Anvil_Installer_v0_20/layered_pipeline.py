@@ -92,7 +92,7 @@ def receipt_history(game, seeds):
         document_game=document.get('gameRoot',document.get('plan',{}).get('gameRoot'))
         if document_game and Path(document_game).resolve()!=game:continue
         if document.get('files'):documents.append((path,document))
-        pending.extend(document[k] for k in ('installationTransaction','originalTransaction','batchManifest') if document.get(k))
+        pending.extend(document[k] for k in ('installationTransaction','originalTransaction','batchManifest','runtimeTransaction','previousConfigTransaction') if document.get(k))
         pending.extend(row['previousTransaction'] for row in document.get('outputs',{}).values() if row.get('previousTransaction'))
     return documents
 
