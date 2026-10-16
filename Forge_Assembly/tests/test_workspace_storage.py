@@ -199,5 +199,15 @@ class SingleStageTests(unittest.TestCase):
     auto._perform(notify=lambda _:None)
    self.assertFalse(old_output.exists());self.assertTrue(output.exists())
    self.assertEqual(ws.read(cfg)['last_stage_manifest'],str(new))
+ def test_interrupted_run_is_cleaned_and_reports_moved_out_of_stage_list(self):
+  with tempfile.TemporaryDirectory() as d:
+   w=Path(d);current,output=self.stage(w,'current');run=w/'auto_runs/interrupted';run.mkdir()
+   (run/'AUTO_SETUP_RESULT.json').write_text(json.dumps({'batch':None,'state':'PREPARING_FOUNDATIONS'}))
+   (run/'mod.zip').write_bytes(b'abandoned archive snapshot')
+   with patch('existing_stage.inspect_existing_stage'):
+    result=ws.cleanup(w,{'last_stage_manifest':str(current)})
+   self.assertTrue(output.exists());self.assertFalse(run.exists())
+   archived=w/'diagnostics/abandoned_runs/interrupted/AUTO_SETUP_RESULT.json'
+   self.assertTrue(archived.exists());self.assertEqual(result['archivedAbandonedRuns'],[str(archived.parent)])
 
 if __name__=='__main__':unittest.main()

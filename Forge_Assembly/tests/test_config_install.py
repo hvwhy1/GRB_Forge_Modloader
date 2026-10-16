@@ -102,6 +102,40 @@ class ConfigurationTests(unittest.TestCase):
             found=ci.find_inis([root]);self.assertNotIn(root/'workspace/not_a_config.ini',found)
             self.assertEqual(ci.find_native_packages([root]),[package])
             source=package/'options/fov/120/FOV.ini';self.assertEqual(ci.ini_destination(source,game),game/'NativeFirstPersonOptions/FOV.ini')
+    def test_nested_core_and_launcher_selections_install_the_same_package(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);game,package=self.fixture(root)
+            expected=ci.native_plan(package,game,dx11_single_loader=True)
+            for selection in (root,package/'core',package/'core/NativeFirstPerson.ini',package/'core/NativeFirstPersonLauncher.exe'):
+                self.assertEqual(ci.resolve_native_package(selection),package)
+                self.assertEqual(ci.native_plan(selection,game,dx11_single_loader=True),expected)
+    def test_finder_ignores_incomplete_copy_and_unrelated_autorun_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);game,package=self.fixture(root)
+            other=root/'incomplete/core';other.mkdir(parents=True)
+            (other/'NativeFirstPerson.ini').write_text('[FirstPerson]')
+            (other/'dinput8.dll').write_bytes(b'not complete')
+            (root/'autorun.cmd').write_text('unrelated launcher')
+            self.assertEqual(ci.find_native_packages([root]),[package])
+            self.assertEqual(ci.resolve_native_package(root),package)
+    def test_multiple_packages_require_selection_instead_of_mixing_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);game,package=self.fixture(root)
+            import shutil
+            second=root/'Second';shutil.copytree(package,second)
+            with self.assertRaisesRegex(ValueError,'FPV_PACKAGE_CHOICE'):ci.resolve_native_package(root)
+            self.assertEqual(ci.resolve_native_package(second),second)
+    def test_incomplete_explicit_package_does_not_fall_back_to_other_copy(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);game,package=self.fixture(root)
+            (package/'core/NativeFirstPersonLauncher.exe').unlink()
+            with self.assertRaisesRegex(ValueError,'Missing: core/NativeFirstPersonLauncher.exe'):ci.resolve_native_package(package)
+            self.assertEqual(ci.find_native_packages([root]),[])
+    def test_empty_selection_requires_source_and_can_discover_unique_download(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);game,package=self.fixture(root)
+            with self.assertRaisesRegex(ValueError,'FPV_PACKAGE_NOT_FOUND'):ci.native_plan('',game)
+            self.assertEqual(ci.resolve_native_package('',[root]),package)
     def test_running_game_and_outside_path_block_before_backup(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);game,package=self.fixture(root)

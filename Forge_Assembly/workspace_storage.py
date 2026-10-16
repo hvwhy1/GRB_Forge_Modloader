@@ -258,6 +258,35 @@ def usage(work):
                 if key not in seen:seen.add(key);total+=s.st_size;count+=1
     return {'uniqueBytes':total,'uniqueFiles':count}
 
+
+def archive_abandoned_runs(work,cfg,keep):
+    """Move reports from interrupted attempts out of the staged-build list."""
+    work=Path(work).resolve();base=work/'auto_runs';moved=[]
+    if not base.is_dir() or base.resolve()!=base:return moved
+    for entry in os.scandir(base):
+        if not entry.is_dir(follow_symlinks=False) or reparse(entry):continue
+        run=Path(entry.path);report=run/'AUTO_SETUP_RESULT.json'
+        if not report.is_file() or list(run.glob('BATCH_RESULT*.json')):continue
+        doc=read(report)
+        if doc.get('batch') is not None:continue
+        references=list(keep)+[v for v in cfg.values() if isinstance(v,str) and v]
+        if any(inside(run,p) for p in references):continue
+        # Only report-only attempts are moved; an undeleted payload stays visible.
+        if any(e is None or Path(e).suffix.casefold() not in TEXT for e in _run_files(run)):continue
+        destination=work/'diagnostics'/'abandoned_runs'/run.name
+        if destination.exists():continue
+        if not inside(work,run) or not inside(work,destination) or run.resolve()!=run:raise StorageError('Unsafe abandoned run directory')
+        destination.parent.mkdir(parents=True,exist_ok=True)
+        os.replace(run,destination);moved.append(str(destination))
+    return moved
+
+
+def _run_files(folder):
+    for entry in os.scandir(native(folder)):
+        if reparse(entry):yield None
+        elif entry.is_dir(follow_symlinks=False):yield from _run_files(entry.path)
+        else:yield entry.path
+
 def cleanup(work,cfg,extra_stages=(),log=lambda _:None,dry_run=False):
     work=Path(work).resolve()
     with lease(work):
@@ -290,6 +319,7 @@ def cleanup(work,cfg,extra_stages=(),log=lambda _:None,dry_run=False):
             result['retiredBackupSets']=[str(p) for p in retired]
             result['removedFiles']+=retired_result['removedFiles'];result['removedLogicalBytes']+=retired_result['removedLogicalBytes'];result['errors']+=retired_result['errors']
             result['deduplicatedBackupPaths']=deduplicate_backups(work,log)
+            result['archivedAbandonedRuns']=archive_abandoned_runs(work,cfg,keep)
         result.update(dryRun=dry_run,retainedStages=stages,preexistingValidationNotes=validation,freeSpaceChangeBytes=shutil.disk_usage(work).free-before,**usage(work))
         report=work/'storage_reports'/('CLEANUP_'+time.strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:6]+'.json')
         report.parent.mkdir(exist_ok=True);report.write_text(json.dumps(result,indent=2),encoding='utf-8')

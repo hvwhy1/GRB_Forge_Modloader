@@ -40,7 +40,33 @@ def find_inis(roots):
 
 
 def find_native_packages(roots):
-    return sorted({p.parent.parent.resolve() for p in walk(roots) if p.name.casefold()=='nativefirstperson.ini' and p.parent.name.casefold()=='core' and (p.parent/'dinput8.dll').is_file()},key=str)
+    return sorted({p.parent.parent.resolve() for p in walk(roots) if p.name.casefold()=='nativefirstperson.ini' and p.parent.name.casefold()=='core' and not native_package_missing(p.parent.parent)},key=str)
+
+
+def native_package_missing(package):
+    package=Path(package)
+    required=['core/'+name for name in ('NativeFirstPerson.ini','dinput8.dll','NativeFirstPersonLauncher.exe')]
+    required += ['options/'+role+'/'+variant+'/'+NAMES[role] for role,variant in PRESETS.items()]
+    required.append('options/renderer/dx11/d3d11.dll')
+    return [name for name in required if not (package/name).is_file()]
+
+
+def resolve_native_package(selection,search_roots=()):
+    """Accept the package, its core/INI/launcher, or an enclosing folder."""
+    value=str(selection or '').strip().strip('"')
+    if value:
+        folder=Path(os.path.expandvars(value)).expanduser().resolve()
+        if folder.is_file():folder=folder.parent
+        if folder.name.casefold()=='core':folder=folder.parent
+        if not native_package_missing(folder):return folder
+        if (folder/'core').is_dir() or folder.name.casefold()=='core':
+            raise ValueError('FPV_PACKAGE_INCOMPLETE: '+str(folder)+'\nMissing: '+', '.join(native_package_missing(folder)))
+        candidates=find_native_packages([folder]) if folder.is_dir() else []
+    else:candidates=find_native_packages(search_roots)
+    if len(candidates)==1:return candidates[0]
+    if len(candidates)>1:
+        raise ValueError('FPV_PACKAGE_CHOICE: More than one complete FPV package was found. Choose one from the package dropdown.\n'+'\n'.join(map(str,candidates)))
+    raise ValueError('FPV_PACKAGE_NOT_FOUND: Select the extracted Native First Person package containing core and options, or use Find first-person package. The installer folder and the installed game folder are not FPV source packages.')
 
 
 def read_ini(path):
@@ -60,7 +86,7 @@ def ini_destination(source,game):
 
 
 def native_plan(package,game,choices=None,chain_proxy=False,numeric=None,toggle_key=None,graphics_compatibility=False,dx11_single_loader=False):
-    package=Path(package).resolve();game=Path(game).resolve();choices=dict(PRESETS,**(choices or {}))
+    package=resolve_native_package(package);game=Path(game).resolve();choices=dict(PRESETS,**(choices or {}))
     numeric=dict(numeric or {})
     numeric.setdefault('fov',choices['fov'])
     numeric.setdefault('adsfov','0' if choices['adsfov']=='vanilla' else choices['adsfov'])
@@ -69,7 +95,6 @@ def native_plan(package,game,choices=None,chain_proxy=False,numeric=None,toggle_
     key=validate_toggle_key(toggle_key if toggle_key is not None else choices['input'])
     choices['input']='numpad0'
     core=package/'core'
-    if not all((core/name).is_file() for name in ('NativeFirstPerson.ini','dinput8.dll','NativeFirstPersonLauncher.exe')):raise ValueError('Native package is incomplete: core must include the master INI, dinput8.dll and launcher')
     plan=[]
     for file in sorted(core.rglob('*')):
         if file.is_file():plan.append({'source':str(file),'target':str(game/file.relative_to(core))})

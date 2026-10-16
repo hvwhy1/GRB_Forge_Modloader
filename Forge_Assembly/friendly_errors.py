@@ -20,7 +20,16 @@ def explain(error,work):
             except (OSError,ValueError,TypeError,KeyError):pass
     technical=raw+'\n'+str(doc.get('error',''))
     title='Operation stopped';message='The operation could not finish. Open the diagnostic report for details, then retry after correcting the reported problem.'
-    if 'Storage limit:' in technical:
+    if 'FPV_PACKAGE_CHOICE:' in technical:
+        title='Choose an FPV package'
+        message='More than one complete Native First Person package was found. In First person & ReShade, use Find first-person package and select the intended package from the dropdown, then click Install FPV. Multiple copies are never mixed together.'
+    elif 'FPV_PACKAGE_INCOMPLETE:' in technical:
+        title='FPV package is missing files'
+        message='Extract the full Native First Person package, keeping core and options together. Select that package in First person & ReShade and retry Install FPV. The diagnostic details list the missing files.'
+    elif 'FPV_PACKAGE_NOT_FOUND:' in technical:
+        title='Select the FPV source package'
+        message='In First person & ReShade, use Find first-person package or browse to the extracted Native First Person folder containing core and options, then click Install FPV. Selecting core or an enclosing download folder is also supported.'
+    elif 'Storage limit:' in technical:
         title='Workspace storage limit reached'
         message='Staging stopped before it could keep growing. Open Diagnostics & recovery and use Clean generated files. The default workspace budget is 200 GiB, with at least 20 GiB kept free on the drive. Required backups are preserved; if they leave too little room, review the storage budget before retrying.'
     elif 'Another installer operation is using this workspace' in technical:

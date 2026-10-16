@@ -16,6 +16,12 @@ The October 14 compatibility tests identified startup crashes in the selected Sy
 
 Complete base-parent overrides are inserted before entirely new parents, in separate file sets, so later additions preserve the override slots. The corrected archive build installed six generated Forges and its runtime stage, then survived 92.5 seconds with DX11 FPV/ReShade active and no crash report. The user confirmed gameplay, visible weapons, approximately 200 shotgun damage, F9 first person, normal night vision/thermal, and stability on this archive-generated installation. Evidence: workspace/auto_runs/20261014_164539_ef5829_layered/GAMEPLAY_CONFIRMATION.json. Future mod selections still require their own validation.
 
+## FPV package selection and reviewed batches
+
+In First person & ReShade, select the extracted Native First Person package with `core` and `options`. The installer also accepts its `core` folder, master INI, launcher, or an enclosing folder containing one complete package. Find first-person package lists only complete packages; if several are found, choose one explicitly from the dropdown. Selecting the Forge Assembly installer folder alone does not supply FPV binaries. Package settings are saved after a successful installation. New FPV installations default to the proven single DX11 loader.
+
+Install reviewed batch uses the saved current stage automatically. Select a staged batch opens in that stage's folder with its batch JSON preselected. Startup cleanup removes abandoned archive/extraction copies; report-only interrupted attempts move to `workspace/diagnostics/abandoned_runs`.
+
 ## Workspace storage
 
 Scan & stage cleans disposable extraction, readback and intermediate Forge files before and after each build, including failed builds. Verified composition steps also release scratch files immediately. Reports remain available for diagnosis. Cleanup supports Windows paths longer than 260 characters and never follows junctions or symbolic links.

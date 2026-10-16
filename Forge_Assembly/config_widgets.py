@@ -25,8 +25,8 @@ def native_panel(parent,owner):
     bar=ttk.Frame(body);bar.grid(row=2,column=0,columnspan=2,sticky='w',pady=6)
     def detected(values):
         entry.configure(values=[str(p) for p in values])
-        if values and not Path(source.get(),'core/NativeFirstPerson.ini').is_file():source.set(str(values[0]))
-        owner.status.set(f'Found {len(values)} Native First Person packages')
+        if len(values)==1:source.set(str(values[0]))
+        owner.status.set(f'Found {len(values)} complete FPV packages. Choose the package to install from the dropdown.' if len(values)>1 else f'Found {len(values)} complete FPV packages')
     owner.button(bar,'Find first-person package',lambda:owner.task(lambda:ci.find_native_packages(roots(owner,source.get())),detected)).pack(side='left',padx=(0,8))
     def browse():
         value=filedialog.askdirectory(title='Select folder containing core and options',initialdir=source.get() or str(Path.home()/'Downloads'),parent=owner.root)
@@ -79,13 +79,20 @@ def native_panel(parent,owner):
         numbers={k:v.get() for k,v in numeric.items()}
         key=ci.validate_toggle_key(selected['input'])
         compat=graphics.get()
-        cfg=mm.load(mm.CONFIG,{});cfg.update(native_package=package,native_preset_choices=selected,native_chain_proxy=chaining,native_numeric=numbers,native_toggle_key=key,native_graphics_compatibility=compat);mm.save(mm.CONFIG,cfg)
-        single=cfg.get('native_dx11_single_loader',False)
+        cfg=mm.load(mm.CONFIG,{})
+        single=cfg.get('native_dx11_single_loader',True)
         effective=dict(selected)
         if cfg.get('preserve_game_sensitivity',False):effective['adsfov']='vanilla'
-        def work():return ci.install_files(ci.native_plan(package,game,effective,chaining,numbers,toggle_key=key,graphics_compatibility=compat,dx11_single_loader=single),game,backup)
-        def done(receipt):
-            cfg=mm.load(mm.CONFIG,{});cfg['last_config_transaction']=str(receipt);mm.save(mm.CONFIG,cfg)
+        search=roots(owner,package)
+        def work():
+            resolved=ci.resolve_native_package(package,search)
+            plan=ci.native_plan(resolved,game,effective,chaining,numbers,toggle_key=key,graphics_compatibility=compat,dx11_single_loader=single)
+            return ci.install_files(plan,game,backup),str(resolved)
+        def done(result):
+            receipt,resolved=result;source.set(resolved)
+            cfg=mm.load(mm.CONFIG,{})
+            cfg.update(native_package=resolved,native_preset_choices=selected,native_chain_proxy=chaining,native_numeric=numbers,native_toggle_key=key,native_graphics_compatibility=compat,native_dx11_single_loader=single,last_config_transaction=str(receipt))
+            mm.save(mm.CONFIG,cfg)
             owner.status.set('Native First Person installed - '+str(receipt))
         owner.task(work,done)
     owner.button(fixed,'Install FPV',install,True).pack(side='left')

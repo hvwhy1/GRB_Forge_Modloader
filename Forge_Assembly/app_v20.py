@@ -104,6 +104,7 @@ class App:
         root.bind('<MouseWheel>',lambda e:self.scrolls[self.active_page].yview_scroll(-int(e.delta/120),'units')
             if self.active_page in self.scrolls else None)
         root.after(75,self.drain); root.protocol('WM_DELETE_WINDOW',self.close)
+        root.after(150,self.clean_storage)
 
     def button(self,parent,label,action,primary=False):
         b=ttk.Button(parent,text=label,command=action,style='Primary.TButton' if primary else 'TButton')
@@ -401,8 +402,16 @@ class App:
         state=json.loads(Path(manifest).read_text(encoding='utf-8'))
         policy.require_install(state,manifest);return state
 
+    def saved_batch(self):
+        for value in (self.manifest,mm.load(mm.CONFIG,{}).get('last_stage_manifest')):
+            if value:
+                path=Path(value).resolve()
+                if path.is_file() and mm.WORK.resolve() in path.parents:return path
+        return None
+
     def select_batch(self):
-        picked=filedialog.askopenfilename(initialdir=mm.WORK,title='Select a verified staged batch',filetypes=[('Batch JSON','*.json')])
+        saved=self.saved_batch()
+        picked=filedialog.askopenfilename(initialdir=saved.parent if saved else mm.WORK/'auto_runs',initialfile=saved.name if saved else 'BATCH_RESULT.json',title='Select a verified staged batch',filetypes=[('Batch JSON','*.json')])
         if not picked:return
         try:
             state=self.validate_batch(picked)
@@ -430,6 +439,9 @@ class App:
         self.task(lambda:weapon_asset_trial.run(source,toolkit,self.notify),lambda result:self.status.set('Private weapon asset report - '+str(result[0]/'RESULT.json')))
 
     def install(self):
+        if not self.manifest:
+            saved=self.saved_batch()
+            if saved:self.manifest=str(saved)
         if not self.manifest:self.select_batch()
         if not self.manifest:return
         try:
