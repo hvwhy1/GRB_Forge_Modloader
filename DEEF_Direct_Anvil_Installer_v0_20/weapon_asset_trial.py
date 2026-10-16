@@ -3,6 +3,7 @@
 This is a diagnostic, not an installation manifest: weapon definitions, complete
 parent merges and competing variants must also resolve before a full installation.
 """
+import storage_guard
 from pathlib import Path
 import json,time,uuid,subprocess
 import auto_mapping as am
@@ -36,7 +37,7 @@ def run(characterization,toolkit,notify=print):
         work=folder/str(n);work.mkdir();request=work/'REQUEST.json';proof=work/'PROOF.json';output=work/target.name
         be.record_json(request,requests);notify(f'Private weapon asset test: {name}, {len(requests)} new .data assets')
         with (work/'CONSOLE.txt').open('w',encoding='utf-8') as log:
-            proc=subprocess.run(['dotnet',str(dll),'stream-add-outer-trial',str(toolkit),str(target),str(proof),str(request),str(output)],stdout=log,stderr=subprocess.STDOUT)
+            proc=storage_guard.run(['dotnet',str(dll),'stream-add-outer-trial',str(toolkit),str(target),str(proof),str(request),str(output)],stdout=log,stderr=subprocess.STDOUT)
         result=json.loads(proof.read_text(encoding='utf-8')) if proof.exists() else {}
         valid=proc.returncode==0 and result.get('verified') is True and result.get('independentAnvilIndexVerified') is True and result.get('addedEntries')==len(requests) and result.get('sourceUnchanged') is True and result.get('outputSha256','').casefold()==be.sha256(output).casefold()
         item.update(state='NEW_ASSETS_STRUCTURALLY_VERIFIED' if valid else 'REJECTED',proof=str(proof),output=str(output) if valid else None)

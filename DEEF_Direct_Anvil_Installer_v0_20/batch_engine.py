@@ -6,6 +6,7 @@ are deliberately not guessed.
 No third-party Anvil code executes from this Python module except through the
 existing v0.15.3 independently verified C# stage/inspect bridge.
 """
+import storage_guard
 import csv
 import hashlib
 import json
@@ -70,7 +71,7 @@ def game_processes_running():
     if os.name != 'nt':
         raise RuntimeError('Live installation is only supported on Windows.')
     try:
-        p = subprocess.run(['tasklist', '/FO', 'CSV', '/NH'], capture_output=True,
+        p = storage_guard.run(['tasklist', '/FO', 'CSV', '/NH'], capture_output=True,
                            text=True, timeout=15)
         if p.returncode:
             raise RuntimeError('tasklist returned error')
@@ -213,7 +214,7 @@ def bridge_inspect(toolkit, forge, data, work, log):
     import mod_manager as manager
     dll = manager.ROOT/'bin'/'DEEF.AnvilBridgeProbe.dll'
     if not dll.is_file():
-        p = subprocess.run(['dotnet', 'build', str(manager.ROOT/'src'/'AnvilBridgeProbe.csproj'),
+        p = storage_guard.run(['dotnet', 'build', str(manager.ROOT/'src'/'AnvilBridgeProbe.csproj'),
                             '-c', 'Release', '-o', str(manager.ROOT/'bin'), '--nologo', '-p:AnvilToolkitDirectory='+str(Path(toolkit).resolve())],
                            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         log(p.stdout)
@@ -226,7 +227,7 @@ def bridge_inspect(toolkit, forge, data, work, log):
     command = ['dotnet', str(dll), 'stream-inspect', str(toolkit), str(forge), str(report), str(data)]
     # Save diagnostics for every inspection; Python only parses the JSON after exit.
     with open(Path(work)/'INSPECTIONS.txt', 'a', encoding='utf-8') as f:
-        p = subprocess.run(command, stdout=f, stderr=subprocess.STDOUT)
+        p = storage_guard.run(command, stdout=f, stderr=subprocess.STDOUT)
     result = json.loads(report.read_text(encoding='utf-8')) if report.is_file() else {}
     if p.returncode or not result.get('verified'):
         raise RuntimeError('Inspection failed for {}: {} (see {})'.format(data, result.get('error'), report))
@@ -327,7 +328,7 @@ def build_bridge(toolkit, log=print):
     dll=manager.ROOT/'bin'/'DEEF.AnvilBridgeProbe.dll'
     cmd=['dotnet','build',str(manager.ROOT/'src'/'AnvilBridgeProbe.csproj'),
          '-c','Release','-o',str(manager.ROOT/'bin'),'--nologo','-p:AnvilToolkitDirectory='+str(Path(toolkit).resolve())]
-    proc=subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    proc=storage_guard.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                         text=True, timeout=240)
     log(proc.stdout)
     if proc.returncode or not dll.is_file():
@@ -426,7 +427,7 @@ def stage_plan_stream(plan, batch_dir, log=print, run_bridge=None,
                 cmd=['dotnet',str(dll),'stream-preflight',str(toolkit),forge,
                      str(resultfile),str(request)]
                 with (batch_dir/'PREFLIGHT_CONSOLE.txt').open('a',encoding='utf-8') as console:
-                    with subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                    with storage_guard.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
                                           text=True,bufsize=1) as proc:
                         for line in proc.stdout:
                             console.write(line);console.flush();log(line)
@@ -491,7 +492,7 @@ def stage_plan_stream(plan, batch_dir, log=print, run_bridge=None,
             else:
                 cmd=['dotnet',str(dll),'stream-batch',str(toolkit),forge,str(report),str(request),str(out)]
                 with (batch_dir/'STREAM_CONSOLE.txt').open('a',encoding='utf-8') as console:
-                    with subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                    with storage_guard.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
                                           text=True,bufsize=1) as proc:
                         for line in proc.stdout:
                             console.write(line);console.flush();log(line)
@@ -533,12 +534,14 @@ def stage_plan_stream(plan, batch_dir, log=print, run_bridge=None,
 def _copy_verify(source, dest, expected):
     dest.parent.mkdir(parents=True, exist_ok=True)
     with open(source,'rb') as f, open(dest,'xb') as out:
-        shutil.copyfileobj(f,out,1<<20)
+        while chunk:=f.read(1<<20):
+            storage_guard.check();out.write(chunk)
         out.flush();os.fsync(out.fileno())
     if sha256(dest)!=expected:
         raise IOError('Copy hash mismatch: '+str(dest))
 
 
+@storage_guard.suspended
 def install_staged(batch_manifest, backups_root, game_check=game_processes_running):
     """Install a verified batch with atomic swaps, recoverable backups, and hash guards.
 
@@ -587,6 +590,11 @@ def install_staged(batch_manifest, backups_root, game_check=game_processes_runni
     # Check space only for files that need a swap; identical staged files are
     # recorded as already installed and are left untouched.
     bytes_backup=sum(item['target'].stat().st_size for item in changed)
+    import workspace_storage as storage,mod_manager as manager
+    if within(manager.WORK,batch_manifest) and within(manager.WORK,backups_root):
+        limit=storage.limit_bytes(manager.load(manager.CONFIG,{}))
+        if storage.usage(manager.WORK)['uniqueBytes']+bytes_backup>limit:
+            raise storage.StorageError('Storage limit: this installation would exceed the workspace budget with its rollback backup. Use Clean generated files in Diagnostics or increase the storage budget before installing.')
     bytes_pending=max((item['candidate'].stat().st_size for item in changed),default=0)
     margin=512*1024**2 if changed else 0
     if changed and os.stat(game).st_dev == os.stat(backups_root).st_dev:

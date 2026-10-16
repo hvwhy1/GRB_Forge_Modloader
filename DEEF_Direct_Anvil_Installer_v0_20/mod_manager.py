@@ -1,5 +1,6 @@
 # DEEF Direct Anvil v0.17, mapped batch staging with opt-in deployment and rollback.
 # Python 3.8+ standard library. Game directories are read-only by design.
+import storage_guard
 import hashlib
 import json
 import os
@@ -20,6 +21,7 @@ CONFIG = WORK / 'settings.json'
 MOD_EXT = {'.zip', '.7z', '.rar'}
 ARCHIVE_EXT = {'.zip', '.7z', '.rar'}
 DEFAULT_SETTINGS = {
+    'workspace_limit_gib': 200,
     'toolkit': DEFAULT_TOOLKIT, 'forge': '', 'archive_dir': str(ROOT.parent / 'DEEF_Mods'),
     'camera_clearance_m': '0.22', 'camera_x_m': '0.0',
     'camera_y_m': '0.0', 'camera_z_m': '0.0', 'game_root': '', 'backup_root': str(WORK / 'backups'),
@@ -97,7 +99,7 @@ def archive_inventory(path):
     exe = sevenzip()
     if not exe:
         raise RuntimeError('7-Zip CLI not installed; cannot index ' + ext + '. No data changed.')
-    p = subprocess.run([exe, 'l', '-slt', str(path)], stdout=subprocess.PIPE,
+    p = storage_guard.run([exe, 'l', '-slt', str(path)], stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE, universal_newlines=True)
     if p.returncode:
         raise RuntimeError('7-Zip list failed: ' + p.stderr[-700:])
@@ -156,6 +158,7 @@ def _copy_bounded(source, destination, expected_size=None, max_bytes=None):
         if not chunk:
             break
         count += len(chunk)
+        storage_guard.check()
         if count > max_bytes:
             raise ValueError('Extracted payload exceeds its size limit')
         destination.write(chunk)
@@ -209,7 +212,7 @@ def extraction_target(archive, member, archive_hash=None):
             # Cap the streaming output, instead of allowing 7z to fill a disk.
             _check_payload_space(dest.parent, min(limit, max(archive.stat().st_size, 1)))
             with pending.open('xb') as target, tempfile.TemporaryFile() as errors:
-                proc = subprocess.Popen([exe, 'e', '-so', str(archive), member],
+                proc = storage_guard.Popen([exe, 'e', '-so', str(archive), member],
                                         stdout=subprocess.PIPE, stderr=errors)
                 try:
                     _copy_bounded(proc.stdout, target, max_bytes=limit)
@@ -271,7 +274,7 @@ def execute_bridge(command, toolkit, forge, data, obj, payload, on_line=None):
         raise ValueError('Workspace cannot reside inside the game or toolkit')
     dll = ROOT / 'bin' / 'DEEF.AnvilBridgeProbe.dll'
     if not dll.exists():
-        build = subprocess.run(['dotnet', 'build', str(ROOT / 'src' / 'AnvilBridgeProbe.csproj'),
+        build = storage_guard.run(['dotnet', 'build', str(ROOT / 'src' / 'AnvilBridgeProbe.csproj'),
                                 '-c', 'Release', '-o', str(ROOT / 'bin'), '--nologo', '-p:AnvilToolkitDirectory='+str(toolkit.resolve())],
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         if on_line:
@@ -292,7 +295,7 @@ def execute_bridge(command, toolkit, forge, data, obj, payload, on_line=None):
     elif command == 'inspect':
         cmd.append(data or 'AUTO')
     with open(str(run_root / 'CONSOLE.txt'), 'w', encoding='utf-8') as logfile:
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        p = storage_guard.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                              universal_newlines=True, bufsize=1)
         for line in p.stdout:
             logfile.write(line)
@@ -485,7 +488,7 @@ def start_gui(parent=None):
         # this path calls the same dotnet code directly.
         exe = ROOT / 'bin' / 'DEEF.AnvilBridgeProbe.dll'
         if not exe.exists():
-            b = subprocess.run(['dotnet', 'build', str(ROOT / 'src' / 'AnvilBridgeProbe.csproj'), '-c', 'Release',
+            b = storage_guard.run(['dotnet', 'build', str(ROOT / 'src' / 'AnvilBridgeProbe.csproj'), '-c', 'Release',
                                 '-o', str(ROOT / 'bin'), '--nologo', '-p:AnvilToolkitDirectory='+str(Path(vars['toolkit'].get()).resolve())], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             log(b.stdout)
             if b.returncode: raise RuntimeError('C# build failed')
@@ -493,7 +496,7 @@ def start_gui(parent=None):
         output = tmp / 'LAST_INVENTORY.json'
         # Remove any previous report so a failed process cannot look like a new success.
         if output.exists(): output.unlink()
-        p = subprocess.run(['dotnet', str(exe), 'inspect', vars['toolkit'].get(), vars['forge'].get(), str(output), data],
+        p = storage_guard.run(['dotnet', str(exe), 'inspect', vars['toolkit'].get(), vars['forge'].get(), str(output), data],
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         log('INSPECT SELECTOR: {}\n'.format(data))
         log(p.stdout)

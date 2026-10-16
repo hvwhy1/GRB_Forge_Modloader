@@ -47,7 +47,7 @@ def create_paths(archive_dir, game, kit, backup):
     return ar,gm,tk,bk
 
 
-def _perform(archive_dir,game,toolkit,backup, *, stage=True, install=False,
+def _perform_unmanaged(archive_dir,game,toolkit,backup, *, stage=True, install=False,
             allow_subset=False,notify=lambda x:print(x,flush=True),
             saved_mods=None, inspect=None, stage_func=None, game_check=be.game_processes_running,
             full_game_scan=False, choose_conflict=None):
@@ -182,6 +182,23 @@ def cli():
 
 
 
+def _perform(*args, **kwargs):
+    import storage_guard,workspace_storage
+    notify=kwargs.get('notify',lambda text:print(text,flush=True))
+    cfg=mm.load(mm.CONFIG,{})
+    result=None
+    with storage_guard.session(mm.WORK,cfg,notify):
+        try:
+            result=_perform_unmanaged(*args,**kwargs)
+            return result
+        finally:
+            report=result[1] if result else {}
+            stage=report.get('batch')
+            # Failed/cancelled runs retain their reports, not their extracted
+            # resources. A successful stage retains its installable outputs.
+            workspace_storage.cleanup(mm.WORK,mm.load(mm.CONFIG,{}),extra_stages=[stage] if stage else [],log=notify)
+
+
 def perform(*args, build_scope='ENABLED_MOD_SELECTION', **kwargs):
     """Keep single-mod diagnostics and analysis results out of live installation."""
     if not kwargs.get('stage',True) and build_scope=='ENABLED_MOD_SELECTION':build_scope='ANALYSIS_ONLY'
@@ -197,6 +214,8 @@ def perform(*args, build_scope='ENABLED_MOD_SELECTION', **kwargs):
         report['selectedArchiveCount']=len(state.get('selectedArchives',[key for key,mod in mm.load(mm.STATE,{}).items() if mod.get('enabled',True)]))
         if private:state['privateOnly']=True
         be.record_json(manifest,state)
+        if not private and state.get('status')=='VERIFIED_STAGED':
+            cfg=mm.load(mm.CONFIG,{});cfg['last_stage_manifest']=str(manifest);mm.save(mm.CONFIG,cfg)
     be.record_json(Path(run)/'AUTO_SETUP_RESULT.json',report)
     return run,report
 

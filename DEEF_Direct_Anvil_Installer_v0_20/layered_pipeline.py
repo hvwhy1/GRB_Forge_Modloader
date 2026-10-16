@@ -3,6 +3,7 @@
 The live game is never used as scratch space. Every final Forge is swapped only
 once; the recorded hash chain rejects stale stages and silent overwrites.
 """
+import storage_guard
 import collections
 import copy
 import json
@@ -211,7 +212,7 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
             command=['dotnet',str(dll),'stream-foundation-parent',str(toolkit),str(candidate),str(author),parent,str(output),str(receipt)]
             import subprocess
             with (run/'FOUNDATION_CONTENT_CONSOLE.txt').open('a',encoding='utf-8') as console:
-                proc=subprocess.run(command,stdout=console,stderr=subprocess.STDOUT)
+                proc=storage_guard.run(command,stdout=console,stderr=subprocess.STDOUT)
             proof=json.loads(receipt.read_text(encoding='utf-8')) if receipt.is_file() else {}
             if proc.returncode or not proof.get('authorCompleteParentVerified') or not proof.get('independentAnvilIndexVerified'):
                 raise ValueError('Essentials complete parent could not be preserved: '+str(receipt))
@@ -538,7 +539,7 @@ def prepare_guided_additions(mods,view,game,toolkit,run,current,log):
         dll=be.build_bridge(toolkit,log)
         command=['dotnet',str(dll),'stream-add-inner-batch',str(toolkit),str(source),parent,str(request),str(receipt),str(output)]
         with (folder/'CONSOLE.txt').open('w',encoding='utf-8') as console:
-            proc=subprocess.run(command,stdout=console,stderr=subprocess.STDOUT)
+            proc=storage_guard.run(command,stdout=console,stderr=subprocess.STDOUT)
         proof=json.loads(receipt.read_text(encoding='utf-8')) if receipt.is_file() else {}
         if proc.returncode or proof.get('verified') is not True or proof.get('addedEntries')!=len(missing):
             raise ValueError('Nightmare new WaveSpawner assets did not pass the complete-parent insertion trial: '+str(receipt))

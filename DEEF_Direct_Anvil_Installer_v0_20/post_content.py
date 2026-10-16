@@ -1,4 +1,5 @@
 """Extend a verified composed build with newly supplied camera/cover tweaks."""
+import storage_guard
 from pathlib import Path
 from collections import defaultdict
 import copy,json,subprocess,time,uuid
@@ -32,7 +33,7 @@ def prepare(manifest,archives,notify=print):
             covered[item['mod']].append(item['member'])
         be.record_json(folder/'REQUEST.json',req);proof=folder/'PROOF.json';output=folder/'Output/DataPC_patch_01.forge';output.parent.mkdir()
         command=['dotnet',str(dll),'compose-inner',cfg['toolkit'],source,parent,str(folder/'REQUEST.json'),str(proof),str(output)]
-        with (folder/'CONSOLE.txt').open('w',encoding='utf-8') as f:result=subprocess.run(command,stdout=f,stderr=subprocess.STDOUT)
+        with (folder/'CONSOLE.txt').open('w',encoding='utf-8') as f:result=storage_guard.run(command,stdout=f,stderr=subprocess.STDOUT)
         receipt=json.loads(proof.read_text(encoding='utf-8')) if proof.is_file() else {}
         if result.returncode or receipt.get('verified') is not True:raise ValueError('Final tweak composition failed: '+str(proof))
         if receipt['sourceSha256']!=digest or be.sha256(output)!=receipt['outputSha256']:raise ValueError('Final tweak composition fingerprint mismatch')

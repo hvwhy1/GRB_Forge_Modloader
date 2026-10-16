@@ -165,6 +165,12 @@ class App:
             self.button(page,label,fn).pack(anchor='w',pady=7)
         self.button(page,'Test missing KS1 / SPEAR assets privately',self.weapon_asset_test).pack(anchor='w',pady=7)
         self.button(page,'Open operation error reports',lambda:self.open_folder(mm.WORK/'diagnostics'/'errors')).pack(anchor='w',pady=7)
+        storage=ttk.Frame(page);storage.pack(fill='x',pady=8)
+        self.button(storage,'Clean generated files',self.clean_storage).pack(side='left')
+        ttk.Label(storage,text='Workspace limit (GiB):').pack(side='left',padx=(14,6))
+        self.storage_limit=tk.StringVar(value=str(mm.load(mm.CONFIG,{}).get('workspace_limit_gib',200)))
+        ttk.Entry(storage,textvariable=self.storage_limit,width=7).pack(side='left')
+        self.button(storage,'Save storage limit',self.save_storage_limit).pack(side='left',padx=8)
         ttk.Label(page,text='Self-tests exercise private temporary fixtures. A successful hash or Anvil readback does not prove '
                   'that a mod can load in the game. Recovery uses the saved hashes and atomic replacement.',
                   style='Muted.TLabel',wraplength=880).pack(anchor='w',pady=20)
@@ -183,6 +189,20 @@ class App:
             self.loaded.add(key)
         elif key=='review' and not self.busy:self.refresh_merge_settings()
         self.active_page=key;self.hosts[key].tkraise()
+
+    def save_storage_limit(self):
+        try:
+            value=int(self.storage_limit.get())
+            if not 50<=value<=500:raise ValueError()
+        except ValueError:
+            messagebox.showerror('Choose a storage limit','Enter a whole number between 50 and 500 GiB.',parent=self.root);return
+        cfg=mm.load(mm.CONFIG,{});cfg['workspace_limit_gib']=value;mm.save(mm.CONFIG,cfg)
+        self.status.set(f'Workspace budget saved: {value} GiB. Backups are retained; staging stops if they leave insufficient room.')
+
+    def clean_storage(self):
+        import workspace_storage as storage
+        self.task(lambda:storage.cleanup(mm.WORK,mm.load(mm.CONFIG,{}),log=self.notify),
+            lambda result:self.status.set(f"Removed {result['removedFiles']:,} disposable files; {result['uniqueBytes']/storage.GIB:.1f} GiB retained. Report: {result['report']}"))
 
     def conflicts_page(self):
         page=self.pages['review'];self.heading(page,'Conflicts & new assets','Choose variants, review completeness and merge gameplay settings before installation.')
@@ -272,7 +292,10 @@ class App:
         self.locked=[]
         self.lock_controls(self.content)
         def worker():
-            try:self.events.put(('done',(fn(),done)))
+            try:
+                import workspace_storage
+                with workspace_storage.lease(mm.WORK):result=fn()
+                self.events.put(('done',(result,done)))
             except Exception as exc:
                 from conflict_flow import StagingCancelled
                 if isinstance(exc,StagingCancelled):self.events.put(('cancelled',str(exc)))
@@ -384,6 +407,7 @@ class App:
         try:
             state=self.validate_batch(picked)
             self.manifest=picked
+            cfg=mm.load(mm.CONFIG,{});cfg['last_stage_manifest']=picked;mm.save(mm.CONFIG,cfg)
             self.stage_text.set(f"Selected: {Path(picked).name} - {len(state.get('finishedRoutes',[]))} replacements")
         except Exception as exc:messagebox.showerror('Batch needs review',str(exc),parent=self.root)
 

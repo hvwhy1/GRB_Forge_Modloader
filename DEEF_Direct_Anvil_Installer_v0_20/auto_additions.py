@@ -7,6 +7,7 @@ an explicit user Yes/No choice. Neither structural verification nor an install g
 that newly added assets are referenced by the game or behave correctly.
 """
 from __future__ import annotations
+import storage_guard
 import argparse
 from collections import Counter, defaultdict
 import copy
@@ -131,7 +132,7 @@ def _bridge(toolkit, dll, source, kind, data, requests, dest_dir, notify, runner
         code=runner(cmd,report,out)
     else:
         with (dest_dir/'CONSOLE.txt').open('w',encoding='utf-8') as f:
-            with subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+            with storage_guard.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
                                   text=True,errors='replace',bufsize=1) as proc:
                 for line in proc.stdout:
                     f.write(line);f.flush();notify(line)
@@ -146,7 +147,7 @@ def _inventory(toolkit,dll,forge,dest_dir,notify, inspector=None):
     if inspector:
         return inspector(forge)
     report=dest_dir/('INVENTORY_'+uuid.uuid4().hex[:8]+'.json')
-    p=subprocess.run(['dotnet',str(dll),'stream-inspect',str(toolkit),str(forge),str(report),'AUTO'],
+    p=storage_guard.run(['dotnet',str(dll),'stream-inspect',str(toolkit),str(forge),str(report),'AUTO'],
                      capture_output=True,text=True,errors='replace')
     if p.returncode or not report.exists():
         raise RuntimeError('Forge index readback failed: '+p.stdout[-600:])
@@ -205,7 +206,7 @@ def _pack_new_data(toolkit,dll,source_dir,output,report,notify,runner=None):
     if runner is not None:code=runner(command,report,output)
     else:
         with (report.parent/'PACK_CONSOLE.txt').open('a',encoding='utf-8') as log:
-            with subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+            with storage_guard.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
                                   text=True,errors='replace',bufsize=1) as proc:
                 for line in proc.stdout:
                     log.write(line);log.flush();notify(line)

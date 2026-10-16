@@ -1,3 +1,4 @@
+import storage_guard
 """Config discovery and transactional deployment of selected INIs/native packages."""
 import configparser
 import os
@@ -143,6 +144,7 @@ def ini_plan(source,target,text,encoding='utf-8'):
     return rows
 
 
+@storage_guard.suspended
 def install_files(plan,game,backups,game_check=be.game_processes_running):
     game=Path(game).resolve();backups=Path(backups).resolve()
     if not (game/'GRB.exe').is_file():raise ValueError('Game folder must contain GRB.exe')

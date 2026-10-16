@@ -1,4 +1,5 @@
 """Read verified vanilla objects for installer-generated gameplay overlays."""
+import storage_guard
 from pathlib import Path
 import json,re,subprocess
 import batch_engine as be
@@ -28,7 +29,7 @@ def prepare(items,sources,toolkit,run,cfg,log):
     def extract(names,folder):
         request=root/(folder+'.json');be.record_json(request,names)
         with (root/'EXTRACTION_CONSOLE.txt').open('a',encoding='utf-8') as console:
-            proc=subprocess.run(['dotnet',str(dll),'cached-extract-short',str(toolkit),str(pinned),'DBContainerEntry_0X104634F921.data',str(request),str(root/folder)],stdout=console,stderr=subprocess.STDOUT)
+            proc=storage_guard.run(['dotnet',str(dll),'cached-extract-short',str(toolkit),str(pinned),'DBContainerEntry_0X104634F921.data',str(request),str(root/folder)],stdout=console,stderr=subprocess.STDOUT)
         if proc.returncode:raise ValueError('Vanilla object extraction failed: '+str(root/'EXTRACTION_CONSOLE.txt'))
         proof=json.loads((root/folder/'READ_ONLY_EXTRACTION.json').read_text())
         if not proof.get('sourceUnchanged') or proof['sourceSha256']!=be.sha256(pinned):raise ValueError('Vanilla extraction source changed')

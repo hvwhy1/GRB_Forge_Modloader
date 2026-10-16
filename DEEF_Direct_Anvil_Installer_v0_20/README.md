@@ -16,6 +16,18 @@ The October 14 compatibility tests identified startup crashes in the selected Sy
 
 Complete base-parent overrides are inserted before entirely new parents, in separate file sets, so later additions preserve the override slots. The corrected archive build installed six generated Forges and its runtime stage, then survived 92.5 seconds with DX11 FPV/ReShade active and no crash report. The user confirmed gameplay, visible weapons, approximately 200 shotgun damage, F9 first person, normal night vision/thermal, and stability on this archive-generated installation. Evidence: workspace/auto_runs/20261014_164539_ef5829_layered/GAMEPLAY_CONFIRMATION.json. Future mod selections still require their own validation.
 
+## Workspace storage
+
+Scan & stage cleans disposable extraction, readback and intermediate Forge files before and after each build, including failed builds. Verified composition steps also release scratch files immediately. Reports remain available for diagnosis. Cleanup supports Windows paths longer than 260 characters and never follows junctions or symbolic links.
+
+The default workspace budget is **200 GiB**, with **20 GiB free disk space** reserved during staging. The guard checks Python writes and monitors owned packing processes; a short overshoot is possible between checks. It stops staging and cleans scratch when space runs out. Installation checks backup space before replacing game files; cleanup never interrupts an installation rollback. Use **Diagnostics & recovery > Clean generated files** or change the budget there (50–500 GiB).
+
+Cleanup preserves the current reviewed stage, the last confirmed archive stage, saved complete setups and recovery files referenced by their receipt history. It retires unreferenced, completed backup sets older than 24 hours while keeping the two newest Forge rollback sets. Duplicate backup files share storage only after SHA-256 verification. Unknown or incomplete backup sets are retained. If retained recovery data fills the budget, staging stops rather than silently deleting it.
+
+Windows folder Properties can count hard-linked Forge files repeatedly. Cleanup reports count each file identity once and also report the disk's free-space change. The budget includes retained backups and stages; it is not permission to retain another 200 GiB of scratch for every run.
+
+The ZIP and Git repository contain tools, not your local rollback backups or saved setup payloads. Keep those recovery files when replacing an existing installation. A completely fresh installer needs your mod archives, AnvilToolkit and a verified game baseline; it cannot recover the old baseline from a modded game by itself.
+
 ## Restore the complete working setup
 
 1. Finish Ubisoft verification or installation of Ghost Recon Breakpoint.

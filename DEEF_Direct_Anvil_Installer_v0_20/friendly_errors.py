@@ -20,7 +20,12 @@ def explain(error,work):
             except (OSError,ValueError,TypeError,KeyError):pass
     technical=raw+'\n'+str(doc.get('error',''))
     title='Operation stopped';message='The operation could not finish. Open the diagnostic report for details, then retry after correcting the reported problem.'
-    if 'WHOLE_DATA_ID_NAME_MISMATCH' in technical:
+    if 'Storage limit:' in technical:
+        title='Workspace storage limit reached'
+        message='Staging stopped before it could keep growing. Open Diagnostics & recovery and use Clean generated files. The default workspace budget is 200 GiB, with at least 20 GiB kept free on the drive. Required backups are preserved; if they leave too little room, review the storage budget before retrying.'
+    elif 'Another installer operation is using this workspace' in technical:
+        title='Another installer operation is running';message='Wait for the other scan, installation, or cleanup to finish, then retry. Only one operation can use this workspace at a time.'
+    elif 'WHOLE_DATA_ID_NAME_MISMATCH' in technical:
         resource=technical.split('WHOLE_DATA_ID_NAME_MISMATCH:',1)[-1].splitlines()[0].strip()
         title='A mod resource needs a compatibility check'
         message=f'A mod renamed an existing game resource: {resource}.\n\nThe installer stopped rather than accepting an unverified replacement. No installation was performed. Try disabling the affected mod and scan again, or share the diagnostic report for a compatibility fix.'

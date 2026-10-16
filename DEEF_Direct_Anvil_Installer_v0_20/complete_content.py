@@ -1,4 +1,5 @@
 """Prepare complete authored assets and merged DB content before route mapping."""
+import storage_guard
 from pathlib import Path
 from collections import defaultdict
 import copy,json,subprocess,struct,re,hashlib,os
@@ -239,7 +240,7 @@ def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None,choose_
         else:command.extend([str(view),str(source),str(folder/'REQUEST.json'),str(proof)])
         log(f'Complete content: {forge} / {parent or "authored containers"} ({len(req)} payloads)')
         if result is None:
-            with (folder/'CONSOLE.txt').open('w',encoding='utf-8') as f:p=subprocess.run(command,stdout=f,stderr=subprocess.STDOUT)
+            with (folder/'CONSOLE.txt').open('w',encoding='utf-8') as f:p=storage_guard.run(command,stdout=f,stderr=subprocess.STDOUT)
             result=json.loads(proof.read_text(encoding='utf-8')) if proof.is_file() else {}
             if parent is None:cp.container_groups(run,forge,folder,items)
             if p.returncode or result.get('verified') is not True:
@@ -251,6 +252,7 @@ def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None,choose_
                         if be.sha256(source)!=current[target]:raise ValueError('Composed source changed while waiting for a conflict choice')
                         cfg['conflict_priorities']=mm.load(mm.CONFIG,{}).get('conflict_priorities',{})
                         log('Conflict choice saved; resuming the current composition step.')
+                        storage_guard.compact(folder)
                         return compose(forge,items,parent,attempt+1)
                 raise ValueError('Complete content composition failed: '+str(proof)+' : '+error[-450:])
             cache_file.parent.mkdir(parents=True,exist_ok=True)
@@ -274,6 +276,7 @@ def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None,choose_
         link_copy(output,source);current[target]=digest;layers.append(layer)
         for key,members in covered.items():updated[key]['members']=[m for m in updated[key]['members'] if m not in members]
         log(f'Complete content verified: {sum(map(len,covered.values()))} supplied payload contributions')
+        storage_guard.compact(folder)
     for forge,items in sorted(outer.items()):
         # Reticle base/patch names may represent the same texture with two author
         # versions. Keep the explicit patch source when both share binary identity.
