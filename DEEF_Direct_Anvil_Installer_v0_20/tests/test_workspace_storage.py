@@ -151,4 +151,53 @@ class LifecycleTests(unittest.TestCase):
     with self.assertRaisesRegex(ValueError,'packing failed'):auto._perform(notify=lambda _:None)
    self.assertFalse((run/'resource.data').exists());self.assertTrue((run/'PROOF.json').exists())
 
+class SingleStageTests(unittest.TestCase):
+ def stage(self,w,name):
+  run=w/'auto_runs'/name;run.mkdir(parents=True)
+  output=run/'output.forge';output.write_bytes(name.encode())
+  manifest=run/'BATCH_RESULT.json'
+  manifest.write_text(json.dumps({'status':'VERIFIED_STAGED','outputs':{'game':{'staged':str(output)}}}))
+  return manifest,output
+ def test_latest_stage_replaces_confirmed_stage_and_keeps_receipts(self):
+  with tempfile.TemporaryDirectory() as d:
+   w=Path(d);old,old_output=self.stage(w,'old');current,output=self.stage(w,'current')
+   with patch('existing_stage.inspect_existing_stage'):
+    result=ws.cleanup(w,{'last_stage_manifest':str(current),'last_confirmed_archive_manifest':str(old)})
+   self.assertTrue(output.exists());self.assertFalse(old_output.exists());self.assertTrue(old.exists())
+   self.assertEqual(result['retainedStages'],[str(current)])
+ def test_new_stage_keeps_required_resource_dependencies_only(self):
+  with tempfile.TemporaryDirectory() as d:
+   w=Path(d);old,old_output=self.stage(w,'old');new,output=self.stage(w,'new');resource,resource_output=self.stage(w,'resource')
+   source=w/'auto_runs/new/ComposedGame';source.mkdir();(source/'GRB.exe').write_bytes(b'exe')
+   resource_doc=ws.read(resource);resource_doc['plan']={'gameRoot':str(source)};resource.write_text(json.dumps(resource_doc))
+   doc=ws.read(new);doc['resourceManifest']=str(resource);new.write_text(json.dumps(doc))
+   with patch('existing_stage.inspect_existing_stage'):
+    result=ws.cleanup(w,{'last_stage_manifest':str(old)},extra_stages=[str(new)])
+   self.assertFalse(old_output.exists());self.assertTrue(output.exists());self.assertTrue(resource_output.exists())
+   self.assertEqual(result['retainedStages'],[str(new),str(resource)])
+ def test_invalid_replacement_leaves_previous_stage_untouched(self):
+  with tempfile.TemporaryDirectory() as d:
+   w=Path(d);old,old_output=self.stage(w,'old');new,output=self.stage(w,'new')
+   with patch('existing_stage.inspect_existing_stage',side_effect=ValueError('Invalid new stage')):
+    with self.assertRaisesRegex(ValueError,'Invalid new stage'):ws.cleanup(w,{'last_stage_manifest':str(old)},extra_stages=[str(new)])
+   self.assertTrue(old_output.exists());self.assertTrue(output.exists())
+ def test_diagnostic_build_keeps_current_stage_and_only_diagnostic_reports(self):
+  import auto_setup_gui as auto,contextlib
+  with tempfile.TemporaryDirectory() as d:
+   w=Path(d);current,output=self.stage(w,'current');diagnostic,diagnostic_output=self.stage(w,'diagnostic')
+   cfg=w/'settings.json';cfg.write_text(json.dumps({'last_stage_manifest':str(current)}))
+   with patch.object(auto.mm,'WORK',w),patch.object(auto.mm,'CONFIG',cfg),patch('storage_guard.session',return_value=contextlib.nullcontext()),patch.object(auto,'_perform_unmanaged',return_value=(diagnostic.parent,{'batch':str(diagnostic)})),patch('existing_stage.inspect_existing_stage'):
+    auto._perform(_retain_stage=False,notify=lambda _:None)
+   self.assertTrue(output.exists());self.assertFalse(diagnostic_output.exists());self.assertTrue(diagnostic.exists())
+   self.assertEqual(ws.read(cfg)['last_stage_manifest'],str(current))
+ def test_successful_build_saves_new_selection_before_retiring_previous(self):
+  import auto_setup_gui as auto,contextlib
+  with tempfile.TemporaryDirectory() as d:
+   w=Path(d);old,old_output=self.stage(w,'old');new,output=self.stage(w,'new')
+   cfg=w/'settings.json';cfg.write_text(json.dumps({'last_stage_manifest':str(old)}))
+   with patch.object(auto.mm,'WORK',w),patch.object(auto.mm,'CONFIG',cfg),patch('storage_guard.session',return_value=contextlib.nullcontext()),patch.object(auto,'_perform_unmanaged',return_value=(new.parent,{'batch':str(new)})),patch('existing_stage.inspect_existing_stage'):
+    auto._perform(notify=lambda _:None)
+   self.assertFalse(old_output.exists());self.assertTrue(output.exists())
+   self.assertEqual(ws.read(cfg)['last_stage_manifest'],str(new))
+
 if __name__=='__main__':unittest.main()

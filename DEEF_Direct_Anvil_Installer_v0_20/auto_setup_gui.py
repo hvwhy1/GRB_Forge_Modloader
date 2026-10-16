@@ -184,6 +184,7 @@ def cli():
 
 def _perform(*args, **kwargs):
     import storage_guard,workspace_storage
+    retain_stage=kwargs.pop('_retain_stage',True)
     notify=kwargs.get('notify',lambda text:print(text,flush=True))
     cfg=mm.load(mm.CONFIG,{})
     result=None
@@ -193,7 +194,17 @@ def _perform(*args, **kwargs):
             return result
         finally:
             report=result[1] if result else {}
-            stage=report.get('batch')
+            stage=report.get('batch') if retain_stage else None
+            if stage:
+                # Save a validated replacement before retiring the old stage.
+                import existing_stage
+                try:existing_stage.inspect_existing_stage(stage)
+                except Exception:
+                    workspace_storage.cleanup(mm.WORK,mm.load(mm.CONFIG,{}),log=notify)
+                    raise
+                latest=mm.load(mm.CONFIG,{})
+                latest['last_stage_manifest']=str(stage)
+                mm.save(mm.CONFIG,latest)
             # Failed/cancelled runs retain their reports, not their extracted
             # resources. A successful stage retains its installable outputs.
             workspace_storage.cleanup(mm.WORK,mm.load(mm.CONFIG,{}),extra_stages=[stage] if stage else [],log=notify)
@@ -205,7 +216,7 @@ def perform(*args, build_scope='ENABLED_MOD_SELECTION', **kwargs):
     private=build_scope!='ENABLED_MOD_SELECTION'
     if private and kwargs.get('install'):
         raise ValueError('Diagnostic/analysis batches cannot be installed. Use Enabled mod selection and Scan and stage.')
-    run,report=_perform(*args,**kwargs)
+    run,report=_perform(*args,_retain_stage=not private,**kwargs)
     report['buildScope']=build_scope
     report['installable']=not private
     if report.get('batch'):

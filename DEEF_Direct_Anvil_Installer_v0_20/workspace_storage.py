@@ -93,7 +93,11 @@ def protected_files(work,cfg,extra_stages=()):
         if doc.get('runtimeManifest'):
             for row in read(doc['runtimeManifest']).get('files',[]):
                 if not row.get('remove'):protect(row.get('source'))
-    for value in (cfg.get('last_stage_manifest'),cfg.get('last_confirmed_archive_manifest'),*extra_stages):stage(value)
+    # One top-level stage owns its resource/runtime dependencies. Confirmation
+    # history retains receipts, not a second installable copy.
+    candidates=[value for value in extra_stages if value]
+    selected=candidates[-1] if candidates else (cfg.get('last_stage_manifest') or cfg.get('last_confirmed_archive_manifest'))
+    stage(selected)
     # Diagnostic transactions can keep originals outside the normal backup tree.
     for key,value in cfg.items():
         if not isinstance(value,str) or not value.lower().endswith('.json') or not inside(work,value) or not Path(value).is_file():continue
