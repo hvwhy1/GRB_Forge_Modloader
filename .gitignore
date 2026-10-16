@@ -2,7 +2,7 @@
 !/.gitignore
 !/.gitattributes
 !/README.md
-!/DEEF_Direct_Anvil_Installer_v0_20/
+!/Forge_Assembly/
 **/workspace/
 **/bin/
 **/obj/

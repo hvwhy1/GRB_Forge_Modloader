@@ -8,13 +8,13 @@ The archive-generated build was confirmed working in gameplay, including weapon 
 
 Use Windows, Python 3.14 with Tkinter, the .NET 9 SDK, and 7-Zip. Obtain mod archives and the complete original AnvilToolkit 1.3.7 folder separately; keep its DLL and Libs together.
 
-Open `DEEF_Direct_Anvil_Installer_v0_20/START_FORGE_ASSEMBLY.cmd`. Select the game and toolkit folders. Alternatively, copy `data/local_toolkit.example.json` to `data/local_toolkit.json` inside the installer folder and set `toolkitDirectory`, or set `ANVIL_TOOLKIT_DIR`.
+Open `Forge_Assembly/START_FORGE_ASSEMBLY.cmd`. Select the game and toolkit folders. Alternatively, copy `data/local_toolkit.example.json` to `data/local_toolkit.json` inside the installer folder and set `toolkitDirectory`, or set `ANVIL_TOOLKIT_DIR`.
 
 After Ubisoft verifies the game, record the clean baseline. Use **Scan & stage**, review the results, then **Install reviewed batch** with the game closed. New mod selections require their own gameplay validation.
 
 ## Development
 
-From `DEEF_Direct_Anvil_Installer_v0_20`, run:
+From `Forge_Assembly`, run:
 
 ```powershell
 py -3 -m unittest discover -s tests
