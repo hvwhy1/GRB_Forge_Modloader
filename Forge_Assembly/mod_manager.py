@@ -69,14 +69,10 @@ def save(path, value):
     os.replace(str(temp), str(path))
 
 def fingerprint(path):
-    started=time.perf_counter();count=0
-    h = hashlib.sha256()
-    with open(str(path), 'rb') as f:
-        chunk_size=min(4 * 1024**2,max(4096,os.fstat(f.fileno()).st_size))
-        for chunk in iter(lambda: f.read(chunk_size), b''):
-            h.update(chunk);count+=len(chunk)
-    perf.record('hash.'+(Path(path).suffix.lower().lstrip('.') or 'file'),time.perf_counter()-started,count)
-    return h.hexdigest()
+    # Share the same operation-local verification as Forge hashes. Extraction
+    # used to re-read the archive and payload through a second hashing function.
+    from batch_engine import sha256
+    return sha256(path)
 
 def sevenzip():
     for command in ('7z', '7za', '7zz'):

@@ -24,6 +24,7 @@ import auto_additions
 import new_resource_audit
 import mod_manager as mm
 import performance_trace as perf
+import staging_hashes
 from toolkit_config import DEFAULT_TOOLKIT
 
 ROOT=Path(__file__).resolve().parent
@@ -192,6 +193,7 @@ def cli():
 
 
 @perf.profiled
+@staging_hashes.for_staging
 def _perform(*args, **kwargs):
     import storage_guard,workspace_storage
     retain_stage=kwargs.pop('_retain_stage',True)

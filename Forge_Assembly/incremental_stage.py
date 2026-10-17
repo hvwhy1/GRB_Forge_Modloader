@@ -4,6 +4,12 @@ from pathlib import Path
 import batch_engine as be,mod_manager as mm,conflict_policy as cp
 
 PHASES=('beforeOuter','afterOuter','preResource')
+# These modules do not produce Forge bytes. Runtime plans are always rebuilt;
+# changing a panel, diagnostic message or FPV/ReShade installer must not repack
+# every weapon asset. Unknown/new modules remain conservatively included.
+NON_FORGE_SOURCES={'app_v20.py','config_widgets.py','friendly_errors.py','build_package.py',
+                   'config_install.py','reshade_install.py','runtime_stage.py','runtime_history.py',
+                   'backup_slots.py','recovery_snapshot.py','performance_trace.py','staging_hashes.py'}
 
 class RestartFresh(RuntimeError):pass
 
@@ -30,7 +36,7 @@ def advance_view(phase,view,current,reused,through=None):
 
 def revision():
     h=hashlib.sha256()
-    files=list(mm.ROOT.glob('*.py'))+list((mm.ROOT/'src').glob('*.cs'))+list((mm.ROOT/'src').glob('*.csproj'))+list((mm.ROOT/'data').glob('*.json'))
+    files=[p for p in mm.ROOT.glob('*.py') if p.name not in NON_FORGE_SOURCES]+list((mm.ROOT/'src').glob('*.cs'))+list((mm.ROOT/'src').glob('*.csproj'))+list((mm.ROOT/'data').glob('*.json'))
     for p in sorted(files):
         h.update(p.name.encode());h.update(p.read_bytes())
     return h.hexdigest()

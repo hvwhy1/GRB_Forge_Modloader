@@ -18,15 +18,27 @@ import tempfile
 import time
 import uuid
 import performance_trace as perf
+import staging_hashes
 
 
 def sha256(path):
     started=time.perf_counter();count=0
     h = hashlib.sha256()
     with open(path, 'rb') as f:
+        cache=staging_hashes.current()
+        before=staging_hashes.version(f) if cache is not None else None
+        if before is not None and before in cache:
+            if staging_hashes.version(f)==before:
+                cache.move_to_end(before)
+                perf.record('hash.reused',time.perf_counter()-started)
+                return cache[before]
         chunk_size=min(4 << 20,max(4096,os.fstat(f.fileno()).st_size))
         for chunk in iter(lambda: f.read(chunk_size), b''):
             h.update(chunk);count+=len(chunk)
+        if before is not None:
+            if staging_hashes.version(f)!=before:raise ValueError('File changed while hashing: '+str(path))
+            cache[before]=h.hexdigest()
+            while len(cache)>staging_hashes.LIMIT:cache.popitem(last=False)
     perf.record('hash.'+(Path(path).suffix.lower().lstrip('.') or 'file'),time.perf_counter()-started,count)
     return h.hexdigest()
 

@@ -16,6 +16,7 @@ import batch_engine as be
 import mod_manager as mm
 import deployment_policy as policy
 import performance_trace as perf
+import staging_hashes
 
 WRITER='FORGE_LAYERED_BATCH_V20'
 PHASES=('PREPATCH','COMPLETE_FORGE','FOUNDATION_CONTENT','GUIDED_CONTENT','RESOURCE_EDITS')
@@ -158,6 +159,7 @@ def snapshot_archives(mods,run):
     return pinned
 
 
+@staging_hashes.for_staging
 def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=False,
             notify=print,inspect=None,game_check=be.game_processes_running,full_game_scan=False,choose_conflict=None,reuse_enabled=True):
     import auto_mapping
