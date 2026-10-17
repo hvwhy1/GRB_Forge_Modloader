@@ -15,8 +15,9 @@ def safe_target(game,target):
 def cleanup(plan,game,cfg):
     from layered_pipeline import receipt_history
     game=Path(game).resolve()
-    history=receipt_history(game,[cfg.get(k) for k in
-        ('last_config_transaction','last_runtime_transaction','last_transaction','last_actual_transaction','last_proven_transaction')])
+    seeds=[cfg['baseline_config_transaction']] if cfg.get('baseline_config_transaction') else [cfg.get(k) for k in
+        ('last_config_transaction','last_runtime_transaction','last_transaction','last_actual_transaction','last_proven_transaction')]
+    history=receipt_history(game,seeds)
     planned={Path(r['target']).resolve() for r in plan}
     records={}
     for receipt,doc in history:

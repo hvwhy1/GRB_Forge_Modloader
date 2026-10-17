@@ -158,8 +158,10 @@ def install_existing(manifest, backup_root, *, expected_game=None,
     state=json.loads(Path(manifest).read_text())
     if state.get('runtimeManifest'):
         import runtime_stage
+        import backup_slots
         try:
-            receipt=runtime_stage.install(state['runtimeManifest'],summary['gameRoot'],Path(manifest).parent,backup_root,game_check=game_check)
+            with backup_slots.deferred():
+                receipt=runtime_stage.install(state['runtimeManifest'],summary['gameRoot'],Path(manifest).parent,backup_root,game_check=game_check)
             tx=json.loads(Path(transaction).read_text());tx['runtimeTransaction']=str(receipt);be.record_json(transaction,tx)
         except Exception:
             be.restore_install(transaction,game_check=game_check);raise

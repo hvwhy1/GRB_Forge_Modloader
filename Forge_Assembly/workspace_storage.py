@@ -90,6 +90,9 @@ def protected_files(work,cfg,extra_stages=()):
         doc=read(path);stages.append(str(path.resolve()));protect(str(path))
         if doc.get('status')!='VERIFIED_STAGED':raise StorageError('A retained stage is incomplete; cleanup stopped: '+str(path))
         for row in doc.get('outputs',{}).values():protect(row.get('staged'))
+        for rows in doc.get('phaseSources',{}).values():
+            for row in rows.values():protect(row.get('file'))
+        for item in doc.get('reusedForges',{}).values():stage(item.get('manifest'))
         for layer in doc.get('foundationLayers',[])+doc.get('postLayers',[]):
             protect(layer.get('archive'))
             for archive in layer.get('sourceArchives',{}):protect(archive)

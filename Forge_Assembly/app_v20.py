@@ -144,19 +144,19 @@ class App:
         ttk.Separator(page).pack(fill='x',pady=10)
         profiles=ttk.Frame(page);profiles.pack(fill='x',pady=15)
         ttk.Label(profiles,text='Stage profile').pack(side='left',padx=(0,12))
-        profile_choice=ttk.Combobox(profiles,textvariable=self.profile,values=['Enabled mod selection','One mod diagnostic'],
-                     state='readonly',width=25)
+        profile_choice=ttk.Combobox(profiles,textvariable=self.profile,values=['Enabled mod selection','Add one mod to current stage','One mod diagnostic'],
+                     state='readonly',width=29)
         profile_choice.pack(side='left')
         self.mod_choice=ttk.Combobox(profiles,textvariable=self.single_mod,state='disabled',width=43)
         self.mod_choice.pack(side='left',padx=10)
         profile_choice.bind('<<ComboboxSelected>>',lambda _:self.mod_choice.configure(
-            state='readonly' if self.profile.get()=='One mod diagnostic' else 'disabled'))
-        ttk.Label(page,text='One mod diagnostic creates a report for troubleshooting; it cannot be installed.',
+            state='disabled' if self.profile.get()=='Enabled mod selection' else 'readonly'))
+        ttk.Label(page,text='Add one mod preserves the current selection. Unchanged Forges are reused; shared containers rebuild together. Diagnostics cannot be installed.',
                   style='Muted.TLabel').pack(anchor='w')
         self.button(profiles,'Refresh',self.refresh_mods).pack(side='left')
         actions=ttk.Frame(page);actions.pack(fill='x',pady=5)
         self.button(actions,'1 - Record verified baseline',self.baseline,True).pack(side='left',padx=(0,8))
-        self.button(actions,'2 - Scan & stage mods',self.stage,True).pack(side='left',padx=8)
+        self.button(actions,'2 - Scan / update stage',self.stage,True).pack(side='left',padx=8)
         self.button(actions,'Analyze only',lambda:self.stage(analyze_only=True)).pack(side='left',padx=8)
         ttk.Separator(page).pack(fill='x',pady=18)
         ttk.Label(page,textvariable=self.stage_text,wraplength=920).pack(anchor='w',pady=(0,10))
@@ -235,7 +235,7 @@ class App:
         resolver.show_gui(parent=routes)
 
     def library_page(self):
-        page=self.pages['library'];self.heading(page,'Mod library','Choose enabled archives and stage INI edits in this workspace.')
+        page=self.pages['library'];self.heading(page,'Mod library','Toggles update the combined stage. Install reviewed batch applies those changes to the game. Shared Forges rebuild when needed.')
         book=ttk.Notebook(page);book.pack(fill='both',expand=True)
         archives=ttk.Frame(book,padding=10);ini=ttk.Frame(book,padding=10)
         book.add(archives,text='Archives');book.add(ini,text='INI workspace')
@@ -266,9 +266,17 @@ class App:
             key=selected[0];current[key]['enabled']=not current[key].get('enabled',True)
             current[key]['_enabled_by_user']=True;mm.save(mm.STATE,current);draw(dict(current))
             tree.selection_set(key)
+            pending=getattr(self,'selection_update_after',None)
+            if pending:self.root.after_cancel(pending)
+            def update():
+                self.selection_update_after=None
+                if self.busy:self.selection_update_after=self.root.after(300,update)
+                else:self.stage(selection_update=True)
+            self.selection_update_after=self.root.after(700,update)
         self.button(bar,'Refresh archives',refresh).pack(side='left',padx=(0,8))
         self.button(bar,'Toggle selected archive',toggle).pack(side='left',padx=8)
         tree.bind('<Double-1>',lambda _:toggle() if not self.busy else None)
+        self.refresh_library_view=lambda:draw(mm.load(mm.STATE,{}))
         draw(mm.load(mm.STATE,{}))
         import config_widgets
         self.ini_workspace=config_widgets.ini_panel(ini,self)
@@ -283,7 +291,7 @@ class App:
 
     def refresh_mods(self):
         folder=Path(self.paths['archive_dir'].get())
-        names=sorted(p.name for p in folder.iterdir() if p.is_file() and p.suffix.lower() in mm.MOD_EXT) if folder.is_dir() else []
+        names=sorted(p.relative_to(folder).as_posix() for p in folder.rglob('*') if p.is_file() and p.suffix.lower() in mm.MOD_EXT) if folder.is_dir() else []
         self.mod_choice.configure(values=names)
         if self.single_mod.get() not in names:self.single_mod.set(names[0] if names else '')
 
@@ -368,27 +376,37 @@ class App:
         self.task(lambda:policy.record_baseline(game,self.notify),
                   lambda _:self.status.set('Clean baseline recorded - scan and stage when ready'))
 
-    def stage(self,analyze_only=False):
+    def stage(self,analyze_only=False,selection_update=False):
+        pending=getattr(self,'selection_update_after',None)
+        if pending:self.root.after_cancel(pending);self.selection_update_after=None
         try:policy.require_ready(self.paths['game_root'].get())
         except Exception as exc:messagebox.showinfo('Baseline needed',str(exc),parent=self.root);return
         self.manifest=None
         self.save_paths();paths={k:v.get() for k,v in self.paths.items()}
-        selected=self.single_mod.get() if self.profile.get()=='One mod diagnostic' else None
+        profile='Enabled mod selection' if selection_update else self.profile.get()
+        selected=self.single_mod.get() if profile in ('One mod diagnostic','Add one mod to current stage') else None
         if selected is not None and not selected:
             messagebox.showerror('Choose a mod','Choose one archive for the diagnostic stage.',parent=self.root);return
         def work():
             from auto_setup_gui import perform
-            previous_selection=mm.load(mm.STATE,{}) if selected else None
+            diagnostic=profile=='One mod diagnostic'
+            previous_selection=mm.load(mm.STATE,{}) if diagnostic else None
             saved=None
             if selected:
-                saved=mm.scan_archives(paths['archive_dir'],mm.load(mm.STATE,{}))
-                for key,mod in saved.items():
-                    mod.update(enabled=Path(key).name==selected,_enabled_by_user=True)
+                if diagnostic:
+                    saved=mm.scan_archives(paths['archive_dir'],mm.load(mm.STATE,{}))
+                    for key,mod in saved.items():mod.update(enabled=key==selected,_enabled_by_user=True)
+                else:
+                    import incremental_stage
+                    saved=incremental_stage.select_one(paths['archive_dir'],selected,mm.load(mm.STATE,{}))
+            elif selection_update:
+                import incremental_stage
+                saved=incremental_stage.select_one(paths['archive_dir'],None,mm.load(mm.STATE,{}))
             try:
                 return perform(paths['archive_dir'],paths['game_root'],paths['toolkit'],paths['backup_root'],
                     stage=not analyze_only,install=False,allow_subset=True,full_game_scan=True,
                     saved_mods=saved,notify=self.notify,choose_conflict=self.request_conflict_choice,
-                    build_scope='DIAGNOSTIC_SINGLE_MOD' if selected else 'ENABLED_MOD_SELECTION')
+                    build_scope='DIAGNOSTIC_SINGLE_MOD' if diagnostic else 'ENABLED_MOD_SELECTION')
             finally:
                 if previous_selection is not None:mm.save(mm.STATE,previous_selection)
         def done(result):
@@ -399,9 +417,10 @@ class App:
                 self.status.set('Cannot install this result. Choose Enabled mod selection and Scan and stage for the complete setup.')
                 return
             self.manifest=report.get('batch')
+            if hasattr(self,'refresh_library_view'):self.refresh_library_view()
             if self.manifest:
                 cfg=mm.load(mm.CONFIG,mm.DEFAULT_SETTINGS);cfg['last_stage_manifest']=self.manifest;mm.save(mm.CONFIG,cfg)
-            self.stage_text.set('Stage: '+report['state']+' - '+str(report.get('selectedArchiveCount','?'))+' enabled archives, '+str(report.get('stagedForges',0))+' Forges, '+str(report.get('stagedRoutes',0))+' edits - report '+str(run))
+            self.stage_text.set('Stage: '+report['state']+' - '+str(report.get('selectedArchiveCount','?'))+' enabled archives, '+str(report.get('stagedForges',0))+' Forges ('+str(report.get('reusedForges',0))+' reused), '+str(report.get('stagedRoutes',0))+' edits - report '+str(run))
             incomplete=report.get('incompleteMods',0)
             self.status.set(f'Stage has {incomplete} incomplete mods - review MOD_COVERAGE.txt' if incomplete else 'Stage ready for review' if self.manifest else 'Analysis complete - review the reports')
             if incomplete:self.navigate('review')

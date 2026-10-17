@@ -18,7 +18,7 @@ def package():
     # another computer's starting state. Defaults are supplied by the source.
     files.discard(ROOT/'data/local_toolkit.json')
     if (ROOT/'workspace/quarantined_stages.json').is_file():files.add(ROOT/'workspace/quarantined_stages.json')
-    manifest={'version':'20.0.0','product':'Forge Assembly','buildRevision':'verified-io-and-composition-optimization','launcher':'START_FORGE_ASSEMBLY.cmd','gameFilesIncluded':False,
+    manifest={'version':'20.0.0','product':'Forge Assembly','buildRevision':'incremental-stage-laser-and-two-backup-slots','launcher':'START_FORGE_ASSEMBLY.cmd','gameFilesIncluded':False,
               'files':{p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
                        for p in sorted(files)}}
     (ROOT/'BUILD_MANIFEST.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')

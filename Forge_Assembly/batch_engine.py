@@ -688,7 +688,12 @@ def restore_install(transaction_file, game_check=game_processes_running):
             raise RuntimeError('Invalid restore file mapping')
         if sha256(b)!=item['originalSha256']:
             raise RuntimeError('Backup hash mismatch; refusing restore')
-        if not f.is_file() or sha256(f) not in (item['installedSha256'],item['originalSha256']):
+        allowed={item['installedSha256'],item['originalSha256']}
+        if str(tx.get('mode','')).startswith('TWO_SLOT_'):
+            import backup_slots
+            known,digest=backup_slots.known_baseline(transaction_file,str(f))
+            if known:allowed.add(digest)
+        if not f.is_file() or sha256(f) not in allowed:
             raise RuntimeError('Game archive changed: differs from both known versions; manual review required: '+str(f))
     for item in reversed(tx['files']):
         dest=Path(item['target'])
@@ -703,4 +708,6 @@ def restore_install(transaction_file, game_check=game_processes_running):
             raise IOError('Restored archive hash mismatch: '+str(dest))
     tx['status']='RESTORED';tx['restoredUtc']=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())
     record_json(transaction_file,tx)
+    import backup_slots
+    backup_slots.after_restore(transaction_file)
     return tx

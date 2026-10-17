@@ -15,11 +15,13 @@ FIELD_GROUPS={
 BUILD_KEYS=('conflict_priorities','weapon_damage_priority','wabo_difficulty','thermal_priority','item_wheel_variant',
  'nightmare_caller_priority','preserve_game_sensitivity','foliage_profile','npc_trigger_priority','bcm_handguard',
  'preserve_player_automatic_fire','preserve_night_vision','shotgun_damage_profile','lmg_accuracy_profile',
- 'ammo_capacity_profile','suppressor_profile','complete_content_pipeline','native_package','native_preset_choices',
+ 'ammo_capacity_profile','suppressor_profile','complete_content_pipeline','use_updated_ads_zoom','native_package','native_preset_choices',
  'native_numeric','native_toggle_key','native_chain_proxy','native_graphics_compatibility','native_dx11_single_loader',
  'reshade_setup','reshade_preset','reshade_shader_folder','reshade_runtime_override','enable_shader_toggler_addon')
 
-def build_settings(cfg):return {key:cfg.get(key) for key in BUILD_KEYS}
+def build_settings(cfg):
+ import additional_options
+ return {**{key:cfg.get(key) for key in BUILD_KEYS},'weapon_variants':additional_options.load()['weapon_variants']}
 
 def logical(name):return re.sub(r'^\d+_-_','',str(name).replace('\\','/').rsplit('/',1)[-1]).casefold()
 def key(forge,parent,name):return '|'.join((Path(forge).name.casefold(),logical(parent or ''),logical(name)))

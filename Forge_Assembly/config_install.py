@@ -7,6 +7,7 @@ import time
 import uuid
 import shutil
 import batch_engine as be
+import backup_slots
 
 MAX_INI=2*1024**2
 PACKAGE_LIMIT=64*1024**2
@@ -170,6 +171,7 @@ def ini_plan(source,target,text,encoding='utf-8'):
 
 
 @storage_guard.suspended
+@backup_slots.config_rotation
 def install_files(plan,game,backups,game_check=be.game_processes_running):
     game=Path(game).resolve();backups=Path(backups).resolve()
     if not (game/'GRB.exe').is_file():raise ValueError('Game folder must contain GRB.exe')
@@ -258,7 +260,11 @@ def restore_files(receipt,game_check=be.game_processes_running):
     for row in tx['files']:
         target=Path(row['target']).resolve()
         if not be.within(game,target) or target.suffix.casefold() in ('.forge','.data'):raise ValueError('Invalid config recovery target')
-        if (be.sha256(target) if target.is_file() else None)!=row['installedSha256']:raise ValueError('Installed configuration changed; refusing to overwrite edits')
+        allowed={row['installedSha256']}
+        if str(tx.get('mode','')).startswith('TWO_SLOT_'):
+            known,digest=backup_slots.known_baseline(receipt,str(target))
+            if known:allowed.add(digest)
+        if (be.sha256(target) if target.is_file() else None) not in allowed:raise ValueError('Installed configuration changed; refusing to overwrite edits')
         if row['backup']:
             backup=Path(row['backup']).resolve()
             if not be.within(receipt.parent,backup) or be.sha256(backup)!=row['originalSha256']:raise ValueError('Config backup missing or changed')
@@ -269,7 +275,9 @@ def restore_files(receipt,game_check=be.game_processes_running):
             try:be._copy_verify(Path(row['backup']),tmp,row['originalSha256']);os.replace(tmp,target)
             finally:tmp.unlink(missing_ok=True)
         else:target.unlink(missing_ok=True)
-    tx['status']='RESTORED';be.record_json(receipt,tx);return receipt
+    tx['status']='RESTORED';be.record_json(receipt,tx)
+    backup_slots.after_restore(receipt)
+    return receipt
 
 
 def validate_native_numbers(values):

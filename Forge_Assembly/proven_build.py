@@ -183,11 +183,13 @@ def install(manifest,game,backups,notify=print,game_check=be.game_processes_runn
         for name,hashes in state['removeKnown'].items():
             p=game/name
             if p.exists():plan.append({'target':str(p),'remove':True,'expectedSha256':be.sha256(p)})
-        config_receipt=ci.install_files(plan,game,backups,game_check=game_check)
+        import backup_slots
+        with backup_slots.deferred():config_receipt=ci.install_files(plan,game,backups,game_check=game_check)
         tx.update(status='INSTALLED',configurationTransaction=str(config_receipt),changedForgeCount=len(changed));be.record_json(receipt,tx)
         cfg=mm.load(mm.CONFIG,{});cfg.update(state['nativeSettings']);cfg.update(last_proven_manifest=str(manifest),last_proven_transaction=str(receipt),last_config_transaction=str(config_receipt))
         if changed:cfg['last_weapon_tuning_transaction']=str(receipt)
-        mm.save(mm.CONFIG,cfg);return receipt
+        mm.save(mm.CONFIG,cfg)
     except Exception:
         if config_receipt is not None:ci.restore_files(config_receipt,game_check=game_check)
         be.record_json(receipt,tx);be.restore_install(receipt,game_check=game_check);raise
+    return backup_slots.after_proven(manifest,receipt,backups)

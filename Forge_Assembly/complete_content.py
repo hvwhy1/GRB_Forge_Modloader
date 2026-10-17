@@ -42,6 +42,8 @@ def inventory(mods):
             if '-714-' in key:
                 route={'forge':'DataPC_Resources_patch_01.forge' if leaf.lower().endswith('.data') else 'DataPC_patch_01.forge','data':leaf if leaf.lower().endswith('.data') else 'TEAMMATE_Template.data','kind':'data' if leaf.lower().endswith('.data') else 'inner'}
             if '-537-' in key and leaf.lower().endswith('.fx'):route={'forge':'DataPC_patch_01.forge','data':'DBContainerEntry_0X104634F921.data','kind':'inner'}
+            if '-775-' in key and logical(leaf) in ('gfx_xmap_red_diffusemap.data','gfx_xlazer_decal_diffusemap.data'):
+                route={'forge':'DataPC_Resources_patch_01.forge','data':leaf,'kind':'data'}
             if Path(mod['archive']).name.lower().startswith('no ads zoom updated-537-') and leaf.lower().endswith('.cameraselectornode'):route={'forge':'DataPC_patch_01.forge','data':'Game Bootstrap Settings.data','kind':'inner'}
             if route is None:continue
             route=am.rc.normalize_route(route)
@@ -186,7 +188,7 @@ def merge_weapons(items,run,config,stock=None,choose_conflict=None):
 
 @perf.timed('composition.total')
 @archive_cache.cached
-def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None,choose_conflict=None):
+def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None,choose_conflict=None,phase_checkpoint=None):
     cfg=mm.load(mm.CONFIG,{})
     if not cfg.get('complete_content_pipeline'):
         log('Complete-content composition explicitly disabled in settings; using legacy resource mapping.')
@@ -287,18 +289,22 @@ def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None,choose_
         log(f'Complete content verified: {sum(map(len,covered.values()))} supplied payload contributions')
         storage_guard.compact(folder)
     for forge,items in sorted(outer.items()):
+        if phase_checkpoint:phase_checkpoint('outer',forge)
         # Reticle base/patch names may represent the same texture with two author
         # versions. Keep the explicit patch source when both share binary identity.
         if any('-42-' in i['mod'] for i in items):
             pass # Keep separate Forge destinations; author package layout matters.
         compose(forge,items)
+    if phase_checkpoint:phase_checkpoint('afterOuter')
     for (forge,data),items in sorted(inner.items()):
+        if not items:continue
         if 'dbcontainerentry' in data:items=merge_weapons(items,run,cfg,stock,choose_conflict=choose_conflict)
         index=forge_audit.read_index(view/forge)
         matches=[e for e in index['entries'] if logical(e['name']+'.data')==data]
         if len(matches)!=1:raise ValueError('Complete inner parent unresolved: '+forge+'/'+data)
         parent=str(index['entries'].index(matches[0]))+'_-_'+matches[0]['name']+'.data'
         compose(forge,items,parent)
+    if phase_checkpoint:phase_checkpoint('preResource')
     present=[]
     for key,mod in mods.items():
         if not mod.get('enabled',True):continue

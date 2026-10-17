@@ -59,10 +59,17 @@ def _perform_unmanaged(archive_dir,game,toolkit,backup, *, stage=True, install=F
     # resources. Installing them after an old resource stage erases those edits.
     import layered_pipeline
     selected=choose_default_flags(mm.scan_archives(ar, saved_mods if saved_mods is not None else mm.load(mm.STATE,{})))
-    if layered_pipeline.has_foundations(selected):
-        return layered_pipeline.perform(selected,gm,tk,bk,stage=stage,install=install,
-            allow_subset=allow_subset,notify=notify,inspect=inspect,game_check=game_check,
-            full_game_scan=full_game_scan,choose_conflict=choose_conflict)
+    if layered_pipeline.has_foundations(selected) or mm.load(mm.CONFIG,{}).get('complete_content_pipeline',True):
+        import incremental_stage
+        try:
+            return layered_pipeline.perform(selected,gm,tk,bk,stage=stage,install=install,
+                allow_subset=allow_subset,notify=notify,inspect=inspect,game_check=game_check,
+                full_game_scan=full_game_scan,choose_conflict=choose_conflict)
+        except incremental_stage.RestartFresh as exc:
+            notify(str(exc))
+            return layered_pipeline.perform(selected,gm,tk,bk,stage=stage,install=install,
+                allow_subset=allow_subset,notify=notify,inspect=inspect,game_check=game_check,
+                full_game_scan=full_game_scan,choose_conflict=choose_conflict,reuse_enabled=False)
     run=mm.WORK/'auto_runs'/(time.strftime('%Y%m%d_%H%M%S')+'_'+os.urandom(3).hex())
     run.mkdir(parents=True,exist_ok=False)
     perf.bind_run(run)

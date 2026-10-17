@@ -71,6 +71,24 @@ The First person & ReShade page provides separate configuration installers. Nume
 
 Scan & stage rebuilds from enabled archives, using ordered complete Forge foundations, authored assets and verified compatibility merges. Newly added archives go through the same scan and composition process. The saved complete setup is a separate recovery shortcut. Keep AnvilToolkit in its original complete folder or a complete clone for rebuilding; its executable cannot be used alone. Private composition diagnostics and older trial batches are not the saved-setup restore source.
 
+## Updating a combined stage
+
+Run one full **Scan / update stage** with this revision to establish dependency fingerprints. Afterward, select **Add one mod to current stage**, choose the new archive, and run the same update button. This preserves enabled and disabled choices; other newly discovered archives stay disabled in this mode. **One mod diagnostic** remains a separate, non-installable troubleshooting mode.
+
+The Mod library toggles update the combined stage automatically after a brief pause, grouping rapid changes. They do not install into the game; use **Install reviewed batch** when the updated stage is ready. Unchanged complete Forges are reused after full output hash and proof checks. A changed shared container is rebuilt with all enabled contributors from the verified baseline, preserving foundation order, compatibility merges and new assets. Removing a mod explicitly restores destinations that are no longer needed.
+
+Reuse depends on archive hashes, baseline, gameplay/variant choices, source revision and reader/tool hashes. A Forge that searched other archives for a new parent has broader dependencies and may need rebuilding when another mod changes. Unknown routes also invalidate conservatively. Updates can therefore take time; they never append files blindly to a previously modified database. One current stage owns flattened proof bundles and bounded inputs for the foundation, container and resource phases. Identical phase inputs share a file, and later reads see the proper build phase instead of an old final output. These checkpoints remain subject to the workspace budget. Repeated updates do not accumulate old stages or growing proof chains. Newly resolved routes or conflict choices that invalidate reuse automatically restart from clean sources.
+
+No Visible Laser Light (775) now routes both authored textures to `DataPC_Resources_patch_01.forge`. Both identities also exist in the base Resources Forge, which made generic discovery ambiguous. A real private Anvil composition replaced and independently read back both textures, verified the final Forge and confirmed the live source remained unchanged. In-game laser appearance still needs the user's check after installing a newly built stage.
+
+## Two recovery sets
+
+With a recorded clean baseline, successful archive and configuration installations retain **Baseline** and **LastWorking** under the backup folder. Baseline contains the verified original bytes for installer-managed files; LastWorking contains their bytes before the latest change. An idempotent reinstall preserves the previous recovery point. Both sets have separate Forge and runtime receipts. These are installation snapshots, not character-save backups or proof that a particular build passed gameplay testing.
+
+Replacement slots are verified before older transaction directories are retired. Small historical receipts remain in `workspace/diagnostics/backup_history`. Restore operations update the recovery links used by later staging. Pending or failed recovery transactions are preserved until resolved, rather than deleted to satisfy a folder count. Saved-setup recovery without a known clean baseline retains its original transaction backups until the baseline can be established.
+
+Regression coverage for this revision: 209 tests run, one platform-dependent skip. Private tests cover repeated updates and phase ordering, resource-proof export/install, source changes and global lookups, removal and vanilla restoration, corrupt-stage rejection, one-stage cleanup, three successive installs, standalone config installs, repeated configuration versions, idempotent backups and restoring prior Forge/runtime bytes from a known clean game. A real two-pass laser stage reused its verified Forge on the second pass, retained one stage, produced the same output hash and left the source game untouched.
+
 ## Performance and verification
 
 Scan & stage reuses up to eight ZIP directory readers within one composition, reads selection settings once per inventory, and extracts vanilla gameplay donors in one C# pass. ZIP handles close before installation; their source signatures and full SHA-256 hashes are checked again before composition returns. Payload CRC, size and hash checks remain active, including for previously extracted payloads. No persistent cache of verification decisions is introduced.

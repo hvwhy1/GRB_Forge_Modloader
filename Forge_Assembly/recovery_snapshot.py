@@ -87,4 +87,6 @@ def create_layered(manifest,installation,backups):
         except OSError:be._copy_verify(source,destination,entry['sourceSha256'])
         recovery['files'].append({'target':target,'backup':str(destination),'originalSha256':entry['sourceSha256'],'installedSha256':entry['stagedSha256']})
         recovery['installed'].append(target)
-    path=folder/'INSTALL_TRANSACTION.json';be.record_json(path,recovery);return path
+    path=folder/'INSTALL_TRANSACTION.json';be.record_json(path,recovery)
+    import backup_slots
+    return backup_slots.rotate(manifest,installation,backups,path)

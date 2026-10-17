@@ -159,7 +159,7 @@ def snapshot_archives(mods,run):
 
 
 def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=False,
-            notify=print,inspect=None,game_check=be.game_processes_running,full_game_scan=False,choose_conflict=None):
+            notify=print,inspect=None,game_check=be.game_processes_running,full_game_scan=False,choose_conflict=None,reuse_enabled=True):
     import auto_mapping
     baseline=policy.require_ready(game);game=Path(game).resolve();toolkit=Path(toolkit).resolve()
     import conflict_policy
@@ -181,11 +181,22 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
         foundations=foundation_plan(mods,game,allow_subset,foundation_exclusions)
         report['foundationExclusions']=foundation_exclusions
         sources,previous=baseline_sources(game,baseline,log)
+        import incremental_stage
+        reused,fingerprints,member_targets,reused_details=incremental_stage.reuse(mods,game,baseline,run,previous,log,reuse_enabled) if stage else ({},{},{},[])
+        runtime_mods=copy.deepcopy(mods)
+        mods=incremental_stage.exclude_reused(mods,set(reused),member_targets)
+        foundations=[r for r in foundations if r['forge'] not in reused]
         view=run/'ComposedGame';view.mkdir()
         # Hardlinks are read-only inputs. Writers produce distinct output files.
         link_copy(game/'GRB.exe',view/'GRB.exe')
         for target,source in sources.items():link_copy(source,view/Path(target).name)
         layers=[];archives={};current={k:v for k,v in baseline['hashes'].items()};authored={}
+        reused_states={}
+        for target,item in reused.items():
+            certificate=mm.load(item['manifest'],{});reused_states[target]=certificate
+            before=item['phaseSources']['beforeOuter']
+            candidate=view/Path(target).name;candidate.unlink();link_copy(before['file'],candidate)
+            current[target]=before['sha256']
         for n,row in enumerate(foundations,1):
             log(f"Foundation {n}/{len(foundations)} [{row['phase']}]: {row['mod']} -> {Path(row['forge']).name}")
             archive=row['archive']
@@ -232,7 +243,13 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
         layers.extend(guided_layers)
         for layer in guided_layers:archives[layer['archive']]=layer['archiveSha256']
         import complete_content
-        runtime_mods=copy.deepcopy(mods)
+        checkpoints={t:copy.deepcopy(item['phaseSources']) for t,item in reused.items()}
+        incremental_stage.capture_phase('beforeOuter',view,run,current,checkpoints,reused)
+        def phase_checkpoint(phase,through=None):
+            if phase=='outer':incremental_stage.advance_view('afterOuter',view,current,reused,through)
+            else:
+                incremental_stage.advance_view(phase,view,current,reused)
+                incremental_stage.capture_phase(phase,view,run,current,checkpoints,reused)
         @perf.timed('interaction.wait_for_choice')
         def request_choice(path,message):
             nonlocal initial_settings
@@ -247,7 +264,10 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
                 report['conflictChoicesResumed']=report.get('conflictChoicesResumed',0)+1
             report['state']='COMPOSING';save()
             return accepted
-        mods,content_layers=complete_content.prepare(mods,view,game,toolkit,run,current,log,baseline_sources=sources,choose_conflict=request_choice if choose_conflict else None)
+        vanilla_sources=None if any(Path(t).name.casefold()=='datapc_patch_01.forge' for t in reused) else sources
+        mods,content_layers=complete_content.prepare(mods,view,game,toolkit,run,current,log,baseline_sources=vanilla_sources,choose_conflict=request_choice if choose_conflict else None,phase_checkpoint=phase_checkpoint)
+        for phase in ('afterOuter','preResource'):
+            if any(phase not in rows for rows in checkpoints.values()):phase_checkpoint(phase)
         layers.extend(content_layers)
         for layer in content_layers:archives.update(layer['sourceArchives'])
         be.record_json(run/'INSTALL_ORDER.json',{'phases':list(PHASES),'layers':layers,
@@ -268,6 +288,12 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
         log('Mapping resource edits against prepatch + complete-Forge results...')
         mapped,details,path=auto_mapping.analyze(resources,view,toolkit,run_dir=run/'characterization',
             inspect=inspect,log=log,full_game_scan=full_game_scan)
+        if any(str(game/Path(r['forge']).name) in reused for mod in mapped.values() for r in mod.get('routes',[])):
+            raise incremental_stage.RestartFresh('Newly resolved resources affect a reused Forge; rebuilding with the saved choices.')
+        for row in reused_details:
+            targets_for_member=member_targets.get((row.get('archive'),row.get('member')),set())
+            if targets_for_member and targets_for_member.issubset(reused):
+                details['entries'].append(dict(row,status='VERIFIED_COMPOSED_CONTENT',explanation='Reused complete Forge with matching inputs and verified bytes'))
         for layer in content_layers:
             for key,members in layer['coveredMembers'].items():
                 details['entries'].extend({'archive':key,'member':member,'status':'VERIFIED_COMPOSED_CONTENT','explanation':'Complete authored container/inner composition with independent readback','compositionProof':layer['contentReceipt']} for member in members)
@@ -307,7 +333,13 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
         import conflict_policy
         if initial_settings!=conflict_policy.build_settings(mm.load(mm.CONFIG,{})):
             raise ValueError('Build settings changed during staging. Run Scan and stage again with the final choices.')
+        if stage:
+            global_lookups=incremental_stage.global_lookups(layers,reused)
+            final_fingerprints,_=incremental_stage.fingerprints(runtime_mods,game,baseline,mm.load(mm.CONFIG,{}),global_lookups)
+            if any(final_fingerprints[t]!=fingerprints[t] for t in reused):raise incremental_stage.RestartFresh('Conflict choices changed a reused Forge dependency; rebuilding with the saved choices.')
+            fingerprints=final_fingerprints
         final={'schema':3,'writer':WRITER,'status':'VERIFIED_STAGED','productVersion':policy.VERSION,
+               'forgeFingerprints':fingerprints,'reusedForges':reused,'globalLookupForges':global_lookups,
                'buildSettings':initial_settings,
                'baselineId':baseline['baselineId'],'buildScope':'ENABLED_MOD_SELECTION',
                'selectedArchives':[key for key,mod in original_mods.items() if mod.get('enabled',True)],'installationOrder':list(PHASES),'foundationLayers':layers,
@@ -316,7 +348,11 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
                'presentPayloads':present,'installedPayloads':loose,
                'plan':{'gameRoot':str(game),'toolkit':str(toolkit),'routes':copy.deepcopy(layers),
                        'sourceHashes':{}},'outputs':{},'finishedRoutes':copy.deepcopy(layers),'excludedRoutes':[]}
-        targets={r['forge'] for r in layers}
+        targets={r['forge'] for r in layers}|set(reused)
+        for certificate in reused_states.values():
+            final['plan']['routes'].extend(certificate['plan']['routes'])
+            final['finishedRoutes'].extend(certificate['finishedRoutes'])
+            final['excludedRoutes'].extend(certificate.get('excludedRoutes',[]))
         if inner:
             def translate(row):
                 result=copy.deepcopy(row);result['forge']=str(game/Path(row['forge']).name);return result
@@ -334,21 +370,27 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
         for target in sorted(targets):
             virtual=str(view/Path(target).name)
             entry=inner['outputs'].get(virtual) if inner else None
-            staged=Path(entry['staged']) if entry else Path(virtual)
+            staged=Path(reused_states[target]['outputs'][target]['staged']) if target in reused else Path(entry['staged']) if entry else Path(virtual)
             final['outputs'][target]={'relative':Path(target).name,'sourceSha256':baseline['hashes'][target],
                 'staged':str(staged),'stagedSha256':be.sha256(staged),**previous.get(target,{})}
             final['plan']['sourceHashes'][target]=baseline['hashes'][target]
+        final['phaseSources']={t:checkpoints[t] for t in targets}
+        for target,rows in final['phaseSources'].items():
+            for row in rows.values():
+                if row['sha256']==final['outputs'][target]['stagedSha256']:row['file']=final['outputs'][target]['staged']
         # Archive fingerprints travel with every direct route for compatibility checks.
         for rows in (final['plan']['routes'],final['finishedRoutes']):
             for row in rows:
-                if row.get('kind') in ('forge','foundation_data','guided_inner'):row['archiveSha256']=archives[row['archive']]
+                if row.get('kind') in ('forge','foundation_data','guided_inner'):
+                    if row['archive'] in archives:row['archiveSha256']=archives[row['archive']]
+                    elif not row.get('archiveSha256'):raise ValueError('Missing reused archive fingerprint')
         manifest=run/'BATCH_RESULT.json';be.record_json(manifest,final)
         import mod_coverage
         coverage=mod_coverage.write(details,final,run)
         report.update(modCoverage=str(run/'MOD_COVERAGE.json'),incompleteMods=coverage['incompleteMods'])
         summary=inspect_stage(manifest,game)
         report.update(state='STAGED_VERIFIED',batch=str(manifest),stagedRoutes=len(final['finishedRoutes']),
-                      stagedForges=len(final['outputs']),identityExcludedRoutes=len(final['excludedRoutes']))
+                      stagedForges=len(final['outputs']),reusedForges=len(reused),identityExcludedRoutes=len(final['excludedRoutes']))
         log(f"Layered build verified: {len(layers)} complete Forge steps then {summary['resourceEdits']} resource edits. No live changes.")
         save()
         if install:
@@ -376,8 +418,36 @@ def inspect_stage(manifest,expected_game=None,verify_backups=False):
     if state.get('writer')!=WRITER or state.get('status')!='VERIFIED_STAGED' or state.get('installationOrder')!=list(PHASES):
         raise ValueError('Invalid layered stage/order')
     if not (game/'GRB.exe').is_file():raise ValueError('Missing game executable')
+    for target,rows in state.get('phaseSources',{}).items():
+        if target not in state['outputs'] or set(rows)!=set(('beforeOuter','afterOuter','preResource')):raise ValueError('Incomplete phase checkpoint coverage')
+        if target in state.get('reusedForges',{}):
+            certificate=mm.load(state['reusedForges'][target]['manifest'],{})
+            expected={phase:row['sha256'] for phase,row in certificate.get('phaseSources',{}).get(target,{}).items()}
+        else:
+            expected=dict.fromkeys(('beforeOuter','afterOuter','preResource'),state['plan']['sourceHashes'][target])
+            for layer in state.get('foundationLayers',[]):
+                if layer['forge']!=target:continue
+                if layer.get('kind')=='composed_inner':expected['preResource']=layer['outputSha256']
+                elif layer.get('kind')=='composed_assets':expected.update(afterOuter=layer['outputSha256'],preResource=layer['outputSha256'])
+                else:expected=dict.fromkeys(expected,layer['outputSha256'])
+        if {phase:row['sha256'] for phase,row in rows.items()}!=expected:raise ValueError('Phase checkpoint hash chain differs from the verified build order')
+        for row in rows.values():
+            file=Path(row['file']).resolve()
+            if not be.within(path.parent,file) or not file.is_file() or file.name!=Path(target).name or len(row.get('sha256',''))!=64:raise ValueError('Invalid phase checkpoint source')
     layers=state.get('foundationLayers',[]);phase=(-1,-1);seen=set();hashes=dict(state['plan']['sourceHashes'])
     expected_routes=[]
+    reused=state.get('reusedForges',{})
+    for target,item in reused.items():
+        certificate=Path(item['manifest']).resolve()
+        if not be.within(path.parent,certificate) or certificate==path or target not in state['outputs']:raise ValueError('Invalid incremental proof path/target')
+        prior=json.loads(certificate.read_text(encoding='utf-8'))
+        if prior.get('reusedForges') or set(prior.get('outputs',{}))!={target}:raise ValueError('Incremental proof must be a flattened single-Forge stage')
+        inspect_stage(certificate,game,verify_backups)
+        if item.get('fingerprint')!=state.get('forgeFingerprints',{}).get(target) or item['fingerprint']!=prior.get('forgeFingerprints',{}).get(target):raise ValueError('Incremental dependency fingerprint mismatch')
+        entry=prior['outputs'][target]
+        if hashes.get(target)!=entry['sourceSha256'] or state['outputs'][target]['stagedSha256']!=entry['stagedSha256']:raise ValueError('Incremental source/output hash mismatch')
+        hashes[target]=entry['stagedSha256']
+        expected_routes.extend((r['mod'],r['member'],r['forge'],r.get('kind','forge')) for r in prior['finishedRoutes'])
     for layer in layers:
         step=PHASES.index(layer['phase'])
         target=layer['forge'];key=(step,layer.get('tier',0),target.casefold())

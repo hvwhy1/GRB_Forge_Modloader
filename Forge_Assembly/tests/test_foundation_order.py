@@ -112,6 +112,12 @@ class LayeredBuildTests(unittest.TestCase):
                 self.assertEqual(Path(state['outputs'][str(forge)]['staged']).read_bytes(),b'UNLOCK+EDIT')
                 self.assertEqual(forge.read_bytes(),b'STOCK')
                 self.assertEqual(lp.inspect_stage(manifest)['foundationSteps'],2)
+                import incremental_stage
+                exported=incremental_stage.export_target(manifest,str(forge),run/'ExportedProof')
+                self.assertEqual(lp.inspect_stage(exported)['resourceEdits'],1)
+                exported_tx=be.install_staged(exported,root/'backups',game_check=lambda:[])
+                self.assertEqual(forge.read_bytes(),b'UNLOCK+EDIT')
+                be.restore_install(exported_tx,game_check=lambda:[])
                 policy.require_install(state,manifest)
                 transaction=be.install_staged(manifest,root/'backups',game_check=lambda:[])
                 self.assertEqual(forge.read_bytes(),b'UNLOCK+EDIT')
