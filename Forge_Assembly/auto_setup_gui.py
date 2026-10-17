@@ -23,6 +23,7 @@ import safe_additions
 import auto_additions
 import new_resource_audit
 import mod_manager as mm
+import performance_trace as perf
 from toolkit_config import DEFAULT_TOOLKIT
 
 ROOT=Path(__file__).resolve().parent
@@ -64,6 +65,7 @@ def _perform_unmanaged(archive_dir,game,toolkit,backup, *, stage=True, install=F
             full_game_scan=full_game_scan,choose_conflict=choose_conflict)
     run=mm.WORK/'auto_runs'/(time.strftime('%Y%m%d_%H%M%S')+'_'+os.urandom(3).hex())
     run.mkdir(parents=True,exist_ok=False)
+    perf.bind_run(run)
     report={'schema':'DEEF.auto_setup.19','state':'SCANNING','installRequested':bool(install),
             'subsetApproved':bool(allow_subset),'game':str(gm),'archiveFolder':str(ar),
             'characterization':None,'batch':None,'transaction':None,'errors':[]}
@@ -182,6 +184,7 @@ def cli():
 
 
 
+@perf.profiled
 def _perform(*args, **kwargs):
     import storage_guard,workspace_storage
     retain_stage=kwargs.pop('_retain_stage',True)

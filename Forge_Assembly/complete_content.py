@@ -9,22 +9,25 @@ import auto_mapping as am
 import manual_install_rules as rules
 import deployment_policy as policy
 import forge_audit
+import archive_cache,performance_trace as perf
 
 
 def logical(member):return am.deordinal(member)
 
 
+@perf.timed('composition.inventory')
 def inventory(mods):
+    cfg=mm.load(mm.CONFIG,{})
     seed=am.initial_characterize();outer=defaultdict(list);inner=defaultdict(list)
     for key,mod in mods.items():
         if not mod.get('enabled',True):continue
         if Path(mod['archive']).name.lower().startswith('wabo compatibility tool-'):continue
         if '-1585-' in key:
             from gameplay_options import validate_suppressor_package
-            validate_suppressor_package(mod['members'],mm.load(mm.CONFIG,{}))
+            validate_suppressor_package(mod['members'],cfg)
         archive_hash=be.sha256(mod['archive'])
         for member in mod['members']:
-            if rules.excluded_variant(mod['archive'],member) or policy.held_route(mod['archive'],member):continue
+            if rules.excluded_variant(mod['archive'],member,cfg) or policy.held_route(mod['archive'],member,archive_hash):continue
             leaf=Path(member.replace('\\','/')).name
             if Path(mod['archive']).name.lower().startswith('disabled cover system-537-') and leaf=='Disable Cover System.txt':
                 inner[('DataPC_patch_01.forge','dbcontainerentry_0x104634f921.data')].append({'mod':key,'archive':mod['archive'],'archiveSha256':archive_hash,'member':member,'name':'DBPlayerCover.DBCoverParameters','operation':'remove','forge':'DataPC_patch_01.forge','data':'DBContainerEntry_0X104634F921.data'})
@@ -181,6 +184,8 @@ def merge_weapons(items,run,config,stock=None,choose_conflict=None):
     return others
 
 
+@perf.timed('composition.total')
+@archive_cache.cached
 def prepare(mods,view,game,toolkit,run,current,log,baseline_sources=None,choose_conflict=None):
     cfg=mm.load(mm.CONFIG,{})
     if not cfg.get('complete_content_pipeline'):

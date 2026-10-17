@@ -4,6 +4,7 @@ from pathlib import Path
 import json,re,subprocess
 import batch_engine as be
 import mod_manager as mm
+import performance_trace as perf
 from gameplay_options import logical_name
 
 INPUTS=('Filter_MouseSensitivity_Aim','Filter_MouseSensitivity_default')
@@ -14,6 +15,7 @@ TRIGGERS=SHARED_TRIGGERS+VEHICLE_TRIGGERS
 WHEEL=('DBItemSetting_HealingItemEssence_HealingSyringes',)
 CONCEALMENT=('DBAIBushConfig_Default','DBAIBushConfig_SC_TGT_Grenadier','DBNpcPerceptionConfig_Default','DBNpcPerceptionConfig_SC_TGT_Grenadier','DBSoldierVisualDetectionConfig_Fighter','DBSoldierVisualDetectionConfig_Vantage','DBSoldierVisualDetectionConfig_Vantage_Wolves','DBSoldierVisualDetectionConfig_Wolves','DBSoldierVisualDetectionConfig_SC_TGT_Grenadier')
 
+@perf.timed('baseline.gameplay')
 def prepare(items,sources,toolkit,run,cfg,log):
     if not sources:return items,{}
     root=Path(run)/'VanillaGameplay';source=next((Path(v) for k,v in sources.items() if Path(k).name.casefold()=='datapc_patch_01.forge'),None)
@@ -25,16 +27,14 @@ def prepare(items,sources,toolkit,run,cfg,log):
     from layered_pipeline import link_copy
     pinned=root/'Source'/source.name;link_copy(source,pinned)
     dll=mm.ROOT/'bin/DEEF.AnvilBridgeProbe.dll'
-    empty=root/'EMPTY.json';be.record_json(empty,[])
     def extract(names,folder):
         request=root/(folder+'.json');be.record_json(request,names)
         with (root/'EXTRACTION_CONSOLE.txt').open('a',encoding='utf-8') as console:
-            proc=storage_guard.run(['dotnet',str(dll),'cached-extract-short',str(toolkit),str(pinned),'DBContainerEntry_0X104634F921.data',str(request),str(root/folder)],stdout=console,stderr=subprocess.STDOUT)
+            proc=storage_guard.run(['dotnet',str(dll),'cached-extract-short-existing',str(toolkit),str(pinned),'DBContainerEntry_0X104634F921.data',str(request),str(root/folder)],stdout=console,stderr=subprocess.STDOUT)
         if proc.returncode:raise ValueError('Vanilla object extraction failed: '+str(root/'EXTRACTION_CONSOLE.txt'))
         proof=json.loads((root/folder/'READ_ONLY_EXTRACTION.json').read_text())
         if not proof.get('sourceUnchanged') or proof['sourceSha256']!=be.sha256(pinned):raise ValueError('Vanilla extraction source changed')
         return proof
-    inventory=extract([],'Inventory');available={r['name'].casefold():r for r in inventory['available']}
     full=[]
     if cfg.get('preserve_game_sensitivity',True):full+=list(INPUTS)
     if cfg.get('preserve_player_automatic_fire',True):full+=list(SHARED_TRIGGERS)
@@ -46,8 +46,8 @@ def prepare(items,sources,toolkit,run,cfg,log):
     for item in items:
         if item['name'].lower().endswith('.gr_weapondbentry') and cfg.get('preserve_game_sensitivity',True):
             names.add(logical_name(item['name']))
-    names={n for n in names if n in available}
-    proof=extract([available[n]['name'] for n in sorted(names)],'Objects')
+    proof=extract(sorted(names),'Objects')
+    available={r['name'].casefold():r for r in proof['available']}
     stock={r['name'].casefold():Path(r['file']) for r in proof['rows']}
     result=list(items)
     for name in full:

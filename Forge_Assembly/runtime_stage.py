@@ -2,8 +2,10 @@
 from pathlib import Path
 import json,hashlib,configparser
 import batch_engine as be,config_install as ci,mod_manager as mm
+import performance_trace as perf
 
 
+@perf.timed('runtime.prepare')
 def prepare(mods,game,run,notify=print):
     game=Path(game).resolve();folder=Path(run)/'Runtime';cfg=mm.load(mm.CONFIG,{})
     plan=[];contributions={}

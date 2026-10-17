@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import zipfile
+import archive_cache,performance_trace as perf
 from pathlib import Path
 from toolkit_config import DEFAULT_TOOLKIT
 
@@ -68,10 +69,13 @@ def save(path, value):
     os.replace(str(temp), str(path))
 
 def fingerprint(path):
+    started=time.perf_counter();count=0
     h = hashlib.sha256()
     with open(str(path), 'rb') as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b''):
-            h.update(chunk)
+        chunk_size=min(4 * 1024**2,max(4096,os.fstat(f.fileno()).st_size))
+        for chunk in iter(lambda: f.read(chunk_size), b''):
+            h.update(chunk);count+=len(chunk)
+    perf.record('hash.'+(Path(path).suffix.lower().lstrip('.') or 'file'),time.perf_counter()-started,count)
     return h.hexdigest()
 
 def sevenzip():
@@ -176,12 +180,14 @@ def _check_payload_space(directory, required):
             (required + PAYLOAD_DISK_HEADROOM) / 1024**3, free / 1024**3))
 
 
+@perf.timed('payload.extract_or_verify')
 def extraction_target(archive, member, archive_hash=None):
     safe_archive_member(member)
     # Complete Forge archives are not individual signed-32-bit resource entries.
     limit = 64 * 1024**3 if member.lower().endswith('.forge') else MAX_RESOURCE_BYTES
     archive = Path(archive)
-    member_digest = hashlib.sha256((str(archive) + '\n' + (archive_hash if archive_hash is not None else fingerprint(archive)) + '\n' + member).encode('utf-8')).hexdigest()[:16]
+    archive_hash=archive_hash if archive_hash is not None else fingerprint(archive)
+    member_digest = hashlib.sha256((str(archive) + '\n' + archive_hash + '\n' + member).encode('utf-8')).hexdigest()[:16]
     basename = Path(member.replace('\\', '/')).name
     dest = WORK / 'payloads' / member_digest / basename
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -197,7 +203,7 @@ def extraction_target(archive, member, archive_hash=None):
     pending.unlink(missing_ok=True)
     try:
         if archive.suffix.lower() == '.zip':
-            with zipfile.ZipFile(str(archive)) as z:
+            with archive_cache.open_zip(archive,archive_hash) as z:
                 meta = z.getinfo(member)
                 if not 0 < meta.file_size <= limit:
                     raise ValueError('ZIP payload must be nonempty and smaller than 2 GiB (Forge signed-32-bit entry limit): ' + member)

@@ -17,13 +17,17 @@ import subprocess
 import tempfile
 import time
 import uuid
+import performance_trace as perf
 
 
 def sha256(path):
+    started=time.perf_counter();count=0
     h = hashlib.sha256()
     with open(path, 'rb') as f:
-        for chunk in iter(lambda: f.read(1 << 20), b''):
-            h.update(chunk)
+        chunk_size=min(4 << 20,max(4096,os.fstat(f.fileno()).st_size))
+        for chunk in iter(lambda: f.read(chunk_size), b''):
+            h.update(chunk);count+=len(chunk)
+    perf.record('hash.'+(Path(path).suffix.lower().lstrip('.') or 'file'),time.perf_counter()-started,count)
     return h.hexdigest()
 
 
@@ -322,6 +326,7 @@ def stage_plan(plan, batch_dir, log=print, inspect_func=None, stage_func=None, a
     return stage_plan_stream(plan, batch_dir, log=log, allow_route_exclusions=allow_route_exclusions)
 
 
+@perf.timed('bridge.build')
 def build_bridge(toolkit, log=print):
     """Compile the actual sources (never use a stale binary from a prior version)."""
     import mod_manager as manager
@@ -531,17 +536,22 @@ def stage_plan_stream(plan, batch_dir, log=print, run_bridge=None,
         raise
 
 
+@perf.timed('copy.verified')
 def _copy_verify(source, dest, expected):
     dest.parent.mkdir(parents=True, exist_ok=True)
     with open(source,'rb') as f, open(dest,'xb') as out:
-        while chunk:=f.read(1<<20):
+        count=0
+        while chunk:=f.read(8<<20):
             storage_guard.check();out.write(chunk)
+            count+=len(chunk)
         out.flush();os.fsync(out.fileno())
     if sha256(dest)!=expected:
         raise IOError('Copy hash mismatch: '+str(dest))
+    perf.record('copy.bytes',bytes_read=count)
 
 
 @storage_guard.suspended
+@perf.timed('install.total')
 def install_staged(batch_manifest, backups_root, game_check=game_processes_running):
     """Install a verified batch with atomic swaps, recoverable backups, and hash guards.
 

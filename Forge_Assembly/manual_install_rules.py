@@ -41,12 +41,12 @@ def candidates(archive,member,forges,inspect):
     return result
 
 
-def excluded_variant(archive,member):
+def excluded_variant(archive,member,cfg=None):
     """Explicit user choice for the two overlapping caller resources."""
     name=Path(archive).name.casefold();leaf=Path(member.replace('\\','/')).name
     logical=re.sub(r'^\d+_-_', '',leaf).casefold()
     import mod_manager
-    cfg=mod_manager.load(mod_manager.CONFIG,{})
+    if cfg is None:cfg=mod_manager.load(mod_manager.CONFIG,{})
     folder='/'+member.replace('\\','/').strip('/').casefold()
     if '-1807-' in name and '/'+('FDE' if cfg.get('bcm_handguard','Black')=='Black' else 'Black').casefold()+' handguard/' in folder:
         return 'Selected BCM handguard: '+cfg.get('bcm_handguard','Black')
@@ -74,7 +74,7 @@ def excluded_variant(archive,member):
         return wabo_variant(member,cfg)
     if not ('-1102-' in name and ('nightmare' in name or 'fear' in name)):return None
     if logical not in {'sc_tgt_caller.dbsoldierconfig','sc_tgt_caller_raid.dbsoldierconfig'}:return None
-    priority=mod_manager.load(mod_manager.CONFIG,{}).get('nightmare_caller_priority','New Reinforcements')
+    priority=cfg.get('nightmare_caller_priority','New Reinforcements')
     folder='/'+member.replace('\\','/').strip('/').casefold()
     if priority=='New Reinforcements' and '/traffic improvements/' in folder:
         return 'User selected New Reinforcements for the overlapping caller resource'

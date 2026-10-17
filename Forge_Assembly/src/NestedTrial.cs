@@ -51,10 +51,16 @@ internal static class NestedTrial
         if (!Directory.Exists(folder)) return new Dictionary<string, string>(Cmp);
         var files = Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).ToArray();
         var map = new Dictionary<string, string>(Cmp);
-        foreach (var file in files)
+        var hashes=new string[files.Length];
+        if(files.Length>=128)
+            Parallel.For(0,files.Length,new ParallelOptions{MaxDegreeOfParallelism=4},i=>hashes[i]=Trial.Hash(files[i]));
+        else
+            for(int i=0;i<files.Length;i++)hashes[i]=Trial.Hash(files[i]);
+        for(int i=0;i<files.Length;i++)
         {
+            var file=files[i];
             var name = Path.GetRelativePath(folder, file).Replace('\\', '/');
-            if (!map.TryAdd(name, Trial.Hash(file)))
+            if (!map.TryAdd(name, hashes[i]))
                 throw new IOException("Duplicate nested extraction path: " + name);
         }
         return map;

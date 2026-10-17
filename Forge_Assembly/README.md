@@ -71,6 +71,18 @@ The First person & ReShade page provides separate configuration installers. Nume
 
 Scan & stage rebuilds from enabled archives, using ordered complete Forge foundations, authored assets and verified compatibility merges. Newly added archives go through the same scan and composition process. The saved complete setup is a separate recovery shortcut. Keep AnvilToolkit in its original complete folder or a complete clone for rebuilding; its executable cannot be used alone. Private composition diagnostics and older trial batches are not the saved-setup restore source.
 
+## Performance and verification
+
+Scan & stage reuses up to eight ZIP directory readers within one composition, reads selection settings once per inventory, and extracts vanilla gameplay donors in one C# pass. ZIP handles close before installation; their source signatures and full SHA-256 hashes are checked again before composition returns. Payload CRC, size and hash checks remain active, including for previously extracted payloads. No persistent cache of verification decisions is introduced.
+
+Nested readback hashes use up to four workers for larger folders, preserving the original index order. Complete independent Anvil unpack/readback still verifies every resource and metadata file. After insertion into a Forge, the embedded container must match those verified packed bytes exactly, avoiding a second identical unpack to disk. Forge index/checksum validation remains required. Verified installation copies use larger buffers while retaining full destination hashes, flushes, backups and rollback. The one-stage retention policy is unchanged.
+
+Each new build writes `PERFORMANCE.json` alongside its reports; reviewed installation writes `PERFORMANCE_INSTALL.json`. These record phase/subprocess timings and hashing/copy counters. Metrics overlap and should not be summed; interactive conflict waiting is measured separately. Failed-run profiles follow the retained diagnostic reports.
+
+Private component benchmarks on this computer found 150 ZIP payloads extracted about 3.9 times faster with identical hashes, and the same 242 vanilla donors extracted in 3.0 rather than 5.9 seconds. These component results are not a whole-install speed guarantee; storage, archive types and the selected mods affect total time. The optimization regression suite runs 200 Python tests (one platform-dependent skip), plus C# format/hash checks. No live game installation was performed for this performance revision.
+
+The full DBContainer comparison took 113 seconds with the previous bridge and 72 seconds with the optimized bridge (about 36% less time). Both passed complete independent readback and preserved the source Forge. Packed hashes differed between the independent builds, so a direct comparison also checked all 61,462 decoded resources and metadata files: every name and SHA-256 matched. This validates content equivalence, rather than claiming byte-identical packed output across builds.
+
 ## Validation
 
 141 automated regression tests pass. The real-size fresh-install replay started with the six original Forge files matching the recorded Ubisoft-verified baseline in a private folder. The installer restored all six modded Forges and every runtime file; all 448 files matched the saved hashes. A second install changed zero Forges and zero runtime files. The live game was untouched during that replay.

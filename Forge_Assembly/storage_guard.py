@@ -2,6 +2,7 @@
 import contextlib,contextvars,functools,shutil,subprocess,threading,time
 from pathlib import Path
 import workspace_storage as ws
+import performance_trace as perf
 
 _active=contextvars.ContextVar('storage_budget',default=None)
 
@@ -49,6 +50,7 @@ class Popen(subprocess.Popen):
         if self._budget:self._budget.check()
         return value
 
+@perf.process
 def run(*args,input=None,capture_output=False,timeout=None,check=False,**kwargs):
     if _active.get() is None:return subprocess.run(*args,input=input,capture_output=capture_output,timeout=timeout,check=check,**kwargs)
     if input is not None:kwargs['stdin']=subprocess.PIPE

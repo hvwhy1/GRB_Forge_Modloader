@@ -8,6 +8,7 @@ import collections
 import json
 from pathlib import Path
 import batch_engine as be
+import performance_trace as perf
 
 REQUIRED_RECEIPT_FLAGS = (
     'verified', 'originalSourceUnchanged', 'prefetchBytesPreserved',
@@ -147,8 +148,11 @@ def inspect_existing_stage(manifest, expected_game=None):
             'note':'Receipt metadata checked. Full source/staged SHA-256 rechecked by install_staged before writing.'}
 
 
+@perf.profiled(filename='PERFORMANCE_INSTALL.json')
+@perf.timed('install.existing_stage')
 def install_existing(manifest, backup_root, *, expected_game=None,
                      game_check=be.game_processes_running):
+    perf.bind_run(Path(manifest).parent)
     summary=inspect_existing_stage(manifest,expected_game=expected_game)
     transaction=be.install_staged(summary['manifest'],backup_root,game_check=game_check)
     state=json.loads(Path(manifest).read_text())

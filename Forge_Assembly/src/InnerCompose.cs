@@ -176,9 +176,14 @@ internal static class InnerCompose {
             using(var rewritten=File.OpenRead(output)) {
                 var index=ForgeStream.Read(rewritten);var outer=index.Single(e=>e.Id==parent.Id&&e.Type==parent.Type);
                 string from=Path.Combine(work,"FromForge.data");using(var copy=File.Create(from))ForgeStream.CopyRange(rewritten,copy,outer.Offset,outer.Length);
-                Verify(from,Path.Combine(work,"FromForgeReadback"));
+                // The independently decoded packed container above already
+                // matched every resource and metadata file. Prove the embedded
+                // container is byte-identical instead of writing and hashing
+                // tens of thousands of the same files a second time.
+                if(new FileInfo(from).Length!=new FileInfo(packed).Length||Trial.Hash(from)!=Trial.Hash(packed))
+                    throw new IOException("Embedded container differs from the complete verified nested readback");
             }
-            File.WriteAllText(report!,JsonSerializer.Serialize(new{verified=true,mode="COMPLETE_INNER_COMPOSITION",sourceUnchanged=true,gameModified=false,independentAnvilIndexVerified=true,sourceForge=source,sourceSha256=Trial.Hash(source),output,outputSha256=Trial.Hash(output),addedEntries=added,replacedEntries=seen.Count-added,allUnselectedOriginalObjectsPreserved=true,completeNestedReadbackVerified=true,forgeReceipt=receipt,rows,gameplayVerified=false},new JsonSerializerOptions{WriteIndented=true}));
+            File.WriteAllText(report!,JsonSerializer.Serialize(new{verified=true,mode="COMPLETE_INNER_COMPOSITION",sourceUnchanged=true,gameModified=false,independentAnvilIndexVerified=true,sourceForge=source,sourceSha256=Trial.Hash(source),output,outputSha256=Trial.Hash(output),addedEntries=added,replacedEntries=seen.Count-added,allUnselectedOriginalObjectsPreserved=true,completeNestedReadbackVerified=true,embeddedContainerByteIdentityVerified=true,forgeReceipt=receipt,rows,gameplayVerified=false},new JsonSerializerOptions{WriteIndented=true}));
             return 0;
         }catch(Exception e){Console.Error.WriteLine(e);if(report!=null)File.WriteAllText(report,JsonSerializer.Serialize(new{verified=false,error=e.ToString(),gameModified=false}));return 1;}
     }

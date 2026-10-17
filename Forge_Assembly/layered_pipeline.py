@@ -15,6 +15,7 @@ import uuid
 import batch_engine as be
 import mod_manager as mm
 import deployment_policy as policy
+import performance_trace as perf
 
 WRITER='FORGE_LAYERED_BATCH_V20'
 PHASES=('PREPATCH','COMPLETE_FORGE','FOUNDATION_CONTENT','GUIDED_CONTENT','RESOURCE_EDITS')
@@ -113,6 +114,7 @@ def clean_history_entry(history,target,digest,live):
     raise ValueError('No verified original for modified Forge: '+target+'; verified baseline backup missing/changed')
 
 
+@perf.timed('baseline.sources')
 def baseline_sources(game,baseline,notify=lambda s:None):
     """Use clean originals from the bounded, explicitly linked install history."""
     cfg=mm.load(mm.CONFIG,{})
@@ -140,6 +142,7 @@ def link_copy(source,target):
         be._copy_verify(source,target,be.sha256(source))
 
 
+@perf.timed('archives.snapshot')
 def snapshot_archives(mods,run):
     """Pin selected archive bytes before long indexing; survive download moves."""
     pinned=copy.deepcopy(mods);records=[]
@@ -163,6 +166,7 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
     initial_settings=conflict_policy.build_settings(mm.load(mm.CONFIG,{}))
     run=mm.WORK/'auto_runs'/(time.strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:6]+'_layered')
     run.mkdir(parents=True)
+    perf.bind_run(run)
     report={'schema':'DEEF.layered_setup.20','state':'PREPARING_FOUNDATIONS','game':str(game),
             'installationOrder':list(PHASES),'batch':None,'errors':[]}
     def log(line):
@@ -229,6 +233,7 @@ def perform(mods,game,toolkit,backups,*,stage=True,install=False,allow_subset=Fa
         for layer in guided_layers:archives[layer['archive']]=layer['archiveSha256']
         import complete_content
         runtime_mods=copy.deepcopy(mods)
+        @perf.timed('interaction.wait_for_choice')
         def request_choice(path,message):
             nonlocal initial_settings
             if conflict_policy.build_settings(mm.load(mm.CONFIG,{}))!=initial_settings:

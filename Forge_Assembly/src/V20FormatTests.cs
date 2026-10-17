@@ -67,7 +67,17 @@ internal static class V20FormatTests {
             fixture.Position=232;if(r.ReadInt32()!=2)throw new IOException("Populated set global index remains outside total count");
             if(ForgeDirectoryRepair.Normalize(fixture).Count!=0)throw new IOException("Directory normalization is not idempotent");
         }
-        Console.WriteLine("V20 format tests passed: metadata fields, offsets, links and UTF8 limits.");
+        string temp=Path.Combine(Path.GetTempPath(),"forge-index-test-"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temp);
+        try {
+            for(int i=0;i<512;i++)File.WriteAllBytes(Path.Combine(temp,i+".bin"),Enumerable.Range(0,4096).Select(n=>(byte)(n+i)).ToArray());
+            var timer=System.Diagnostics.Stopwatch.StartNew();
+            var serial=System.IO.Directory.GetFiles(temp).ToDictionary(p=>Path.GetFileName(p),Trial.Hash,StringComparer.OrdinalIgnoreCase);
+            double serialMs=timer.Elapsed.TotalMilliseconds;timer.Restart();var parallel=NestedTrial.Index(temp);double parallelMs=timer.Elapsed.TotalMilliseconds;
+            if(serial.Count!=parallel.Count||serial.Any(k=>!parallel.TryGetValue(k.Key,out var digest)||digest!=k.Value))throw new IOException("Parallel nested index differs from serial SHA-256 readback");
+            Console.WriteLine($"Nested index equivalence: {serial.Count} files; serial {serialMs:F1} ms, bounded parallel {parallelMs:F1} ms.");
+        } finally {System.IO.Directory.Delete(temp,true);}
+        Console.WriteLine("V20 format tests passed: metadata fields, offsets, links, UTF8 limits and complete nested hashes.");
         return 0;
     }
 }
