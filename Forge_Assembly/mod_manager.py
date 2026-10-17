@@ -40,7 +40,7 @@ DEFAULT_SETTINGS = {
     'foliage_profile': 'Vanilla concealment', 'npc_trigger_priority': 'Vanilla automatic fire',
     'preserve_player_automatic_fire': True, 'preserve_night_vision': True,
     'shotgun_damage_profile': '150', 'lmg_accuracy_profile': 'Precision',
-    'ammo_capacity_profile': 'Vanilla', 'suppressor_profile': 'Vanilla-like', 'bcm_handguard': 'Black'
+    'ammo_capacity_profile': 'Vanilla', 'suppressor_profile': 'Normal', 'bcm_handguard': 'Black'
 }
 
 def mkdir():

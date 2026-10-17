@@ -43,6 +43,28 @@ class GameplayOptionsTests(unittest.TestCase):
         cfg=dict(wabo_difficulty='4_Realistic (Hardcore)')
         self.assertIsNone(wabo_variant('WABO/4_Realistic (Hardcore)/DBContainer/1_-_DBAmmoType_5_56.DBAmmoType',cfg))
         self.assertIsNotNone(wabo_variant('WABO/1_Easy/DBContainer/1_-_DBAmmoType_5_56.DBAmmoType',cfg))
+    def test_normal_suppressors_include_mandatory_core_and_preserve_hardcore_weapons(self):
+        cfg=dict(wabo_difficulty='4_Realistic (Hardcore)',suppressor_profile='Normal')
+        custom='WABO/5_Custom/Optional/Suppressors/'
+        for name in ('1_-_Muzzle_STD_ASR_556.MuzzleAttachmentDBEntry','1_-_DBWeaponAttachmentUIConfig_Silencer_ASR.DBWeaponAttachmentUIConfig'):
+            self.assertIsNone(wabo_variant(custom+'0 Core/'+name,cfg))
+            self.assertIsNotNone(wabo_variant('WABO/4_Realistic (Hardcore)/'+name,cfg))
+        self.assertIsNone(wabo_variant(custom+'2 Normal/1_-_Muzzle_SIL_ASR_556.MuzzleAttachmentDBEntry',cfg))
+        self.assertIsNotNone(wabo_variant(custom+'4 Realistic/1_-_Muzzle_SIL_ASR_556.MuzzleAttachmentDBEntry',cfg))
+        self.assertIsNone(wabo_variant('WABO/4_Realistic (Hardcore)/1_-_ASR_4AC.GR_WeaponDBEntry',cfg))
+        self.assertIsNone(wabo_variant('WABO/4_Realistic (Hardcore)/1_-_DBNpcHealth_Default.DBNpcHealth',cfg))
+    def test_each_suppressor_preset_selects_exactly_its_authored_branch(self):
+        from gameplay_options import SUPPRESSOR_PRESETS
+        for selected,folder in SUPPRESSOR_PRESETS.items():
+            cfg=dict(wabo_difficulty='4_Realistic (Hardcore)',suppressor_profile=selected)
+            for other in SUPPRESSOR_PRESETS.values():
+                reason=wabo_variant('WABO/5_Custom/Optional/Suppressors/'+other+'/1_-_Muzzle_SIL_SMG_9mm.MuzzleAttachmentDBEntry',cfg)
+                self.assertEqual(reason is None,folder==other)
+    def test_incomplete_suppressor_preset_cannot_silently_remove_existing_muzzles(self):
+        from gameplay_options import validate_suppressor_package
+        cfg={'suppressor_profile':'Normal'}
+        with self.assertRaisesRegex(ValueError,'requires both'):validate_suppressor_package(['WABO/5_Custom/Optional/Suppressors/2 Normal/Muzzle.Type'],cfg)
+        validate_suppressor_package(['WABO/5_Custom/Optional/Suppressors/0 Core/Muzzle.Type','WABO/5_Custom/Optional/Suppressors/2 Normal/Muzzle.Type'],cfg)
     def test_held_bootstrap_wheel_cannot_leave_half_installed_syringe(self):
         member='Item wheel swap/Syringe and Binoculars/Put in DBContainerEntry_0X104634F921.data/8_-_DBItemSetting_HealingItemEssence_HealingSyringes.DBToolSetting'
         with patch.object(mm,'load',return_value={'item_wheel_variant':'Syringe and Binoculars'}),patch('deployment_policy.held_route',return_value='startup crash'):

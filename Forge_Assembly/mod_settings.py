@@ -45,7 +45,9 @@ def options(mods):
         available=[v for v in difficulties if '/'+v.casefold()+'/' in members]
         add('wabo_difficulty','WABO difficulty',available or difficulties,'4_Realistic (Hardcore)')
         add('ammo_capacity_profile','Ammo reserve',['Difficulty preset','Vanilla'],'Vanilla')
-        add('suppressor_profile','Suppressed detection',['Difficulty preset','Vanilla-like'],'Vanilla-like')
+        from gameplay_options import SUPPRESSOR_PRESETS
+        suppressors=[label for label,folder in SUPPRESSOR_PRESETS.items() if '/suppressors/'+folder.casefold()+'/' in members]
+        add('suppressor_profile','Suppressor preset (independent of difficulty)',['Difficulty preset']+suppressors,'Normal' if 'Normal' in suppressors else 'Difficulty preset')
     vision=['Standard night vision and thermal']
     if '-1159-' in names:vision.append('Pathfinder white thermal vision')
     if '-489-' in names:vision.append('Disable thermal vision')

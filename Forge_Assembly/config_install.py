@@ -186,7 +186,7 @@ def install_files(plan,game,backups,game_check=be.game_processes_running):
         if 'source' in item and 'content' not in item:
             source=Path(item['source']).resolve();size=source.stat().st_size
             if target.suffix.casefold()=='.pck':
-                if target.parent!=game/'sounddata'/'pc' or source.name!=target.name or size>AUDIO_LIMIT:raise ValueError('Invalid audio package destination or size')
+                if target.parent!=game/'sounddata'/'pc' or source.name.casefold()!=target.name.casefold() or size>AUDIO_LIMIT:raise ValueError('Invalid audio package destination or size')
                 with source.open('rb') as f:
                     if f.read(4)!=b'AKPK':raise ValueError('Audio package must have a Wwise AKPK header')
                 stream_source=source

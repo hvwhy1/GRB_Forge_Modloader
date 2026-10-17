@@ -101,14 +101,28 @@ class App:
                 self.stage_text.set('Previous staged batch - '+str(len(state.get('finishedRoutes',[])))+' replacement edits - '+Path(previous).name)
                 self.status.set('Previous staged batch loaded - installation and gameplay status are in the reports')
             except (ValueError,RuntimeError,KeyError,TypeError):pass
-        root.bind('<MouseWheel>',lambda e:self.scrolls[self.active_page].yview_scroll(-int(e.delta/120),'units')
-            if self.active_page in self.scrolls else None)
+        root.bind('<MouseWheel>',self.scroll_page)
+        root.bind_class('TCombobox','<MouseWheel>',self.scroll_page)
         root.after(75,self.drain); root.protocol('WM_DELETE_WINDOW',self.close)
         root.after(150,self.clean_storage)
 
     def button(self,parent,label,action,primary=False):
         b=ttk.Button(parent,text=label,command=action,style='Primary.TButton' if primary else 'TButton')
         self.buttons.append(b); return b
+
+    def scroll_page(self,event):
+        # Combobox class bindings otherwise change the value before the page
+        # receives the gesture. Route it to the nearest enclosing scroll pane.
+        steps=-int(event.delta/120)
+        if not steps and event.delta:steps=-1 if event.delta>0 else 1
+        widget=event.widget
+        while widget is not None and widget is not self.root:
+            if isinstance(widget,tk.Canvas) and widget.cget('scrollregion'):
+                widget.yview_scroll(steps,'units');return 'break'
+            widget=getattr(widget,'master',None)
+        canvas=self.scrolls.get(self.active_page)
+        if canvas:canvas.yview_scroll(steps,'units')
+        return 'break'
 
     def heading(self,page,title,subtitle):
         ttk.Label(page,text=title,style='Title.TLabel').pack(anchor='w',pady=(0,8))

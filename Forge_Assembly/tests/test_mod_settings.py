@@ -5,6 +5,12 @@ import mod_manager as mm,mod_settings as catalog,friendly_errors,build_package
 
 
 class ModSettingsTests(unittest.TestCase):
+ def test_available_suppressor_presets_are_independent_of_wabo_difficulty(self):
+  members=['WABO/4_Realistic (Hardcore)/Weapon.GR_WeaponDBEntry']
+  members+=['WABO/5_Custom/Optional/Suppressors/'+folder+'/Muzzle.Type' for folder in ('0 Core','1 Easy (Vanilla)','2 Normal','3 Hard','4 Realistic')]
+  rows={key:(values,default) for key,label,values,default in catalog.options({'WABO-1585-1.zip':{'members':members}})}
+  self.assertEqual(rows['suppressor_profile'],(['Difficulty preset','Vanilla-like','Normal','Hard','Realistic'],'Normal'))
+  self.assertEqual(rows['wabo_difficulty'][0],['4_Realistic (Hardcore)'])
  def archive(self,root,name,members):
   path=root/name
   with zipfile.ZipFile(path,'w') as z:

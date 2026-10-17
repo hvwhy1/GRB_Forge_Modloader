@@ -28,13 +28,8 @@ def prepare(mods,game,run,notify=print):
         # Its independent addon remains a separate explicit user choice.
         if not cfg.get('enable_shader_toggler_addon',False):rows=[r for r in rows if Path(r['target']).name not in ('ShaderToggler.addon64','ShaderToggler.ini')]
         plan.extend(rows)
-    for key,mod in mods.items():
-        if not mod.get('enabled',True) or '-1245-' not in key:continue
-        for member in mod['members']:
-            if Path(member).name!='soundspc_sfx_wea_.pck':continue
-            source=mm.extraction_target(mod['archive'],member,archive_hash=be.sha256(mod['archive']))
-            target=game/'sounddata/pc'/Path(member).name
-            plan.append(dict(source=str(source),target=str(target)));contributions[str(target)]={'mod':key,'member':member}
+    import audio_packages
+    plan.extend(audio_packages.prepare(mods,game,run,cfg,notify))
     # Disabled shader addons must not survive an earlier/manual installation.
     if not cfg.get('enable_shader_toggler_addon',False):
         planned={Path(row['target']).resolve() for row in plan}
@@ -67,11 +62,14 @@ def prepare(mods,game,run,notify=print):
             else:be._copy_verify(item['source'],dest,be.sha256(item['source']))
             row.update(source=str(dest.resolve()),sha256=be.sha256(dest),allowProxyReplace=item.get('allowProxyReplace',False))
         if str(target) in contributions:row['contribution']=contributions[str(target)]
+        if item.get('audioContributions'):row['audioContributions']=item['audioContributions']
         rows.append(row)
     state={'schema':'GRB_RUNTIME_STAGE_V20','gameRoot':str(game),'files':rows}
     folder.mkdir(parents=True,exist_ok=True);receipt=folder/'RUNTIME_STAGE.json';be.record_json(receipt,state)
     notify('Generated runtime stage from packages: '+str(len(rows))+' files/settings')
-    return str(receipt),[r['contribution'] for r in rows if r.get('contribution')]
+    credited=[r['contribution'] for r in rows if r.get('contribution')]
+    credited.extend(c for r in rows for c in r.get('audioContributions',[]))
+    return str(receipt),credited
 
 
 def inspect(receipt,game,batch):

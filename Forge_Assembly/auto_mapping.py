@@ -74,6 +74,8 @@ def from_parts(parts, evidence):
 
 
 def candidates_for_member(archive, member, historic):
+    from audio_packages import target_for
+    if target_for(member,'.'):return [],'RUNTIME_SOUND_BANK','RUNTIME_AUDIO_PACKAGE'
     if Path(archive).name.lower().startswith('wabo compatibility tool-'):
         return [],'INSTALLER_HELPER','IGNORED_SUPPORT_FILE'
     result=[];seen=set()
@@ -427,7 +429,7 @@ def analyze(mods, game_root, toolkit, *, run_dir, inspect=None, log=lambda s:Non
     # Enrich the report with actionable blocking reasons rather than only counts.
     reason_counts=collections.Counter()
     for row in docs['entries']:
-        if row['status'] in ('VERIFIED_LOCAL_TARGET','IGNORED_SUPPORT_FILE','USER_VARIANT_EXCLUDED'):continue
+        if row['status'] in ('VERIFIED_LOCAL_TARGET','IGNORED_SUPPORT_FILE','USER_VARIANT_EXCLUDED','RUNTIME_AUDIO_PACKAGE'):continue
         why=row.get('explanation','')
         if row['status']=='COMPATIBILITY_HELD':code='GAME_STARTUP_COMPATIBILITY_HOLD'
         elif row['status']=='INCOMPLETE_WEAPON_PACK_HELD':code='INCOMPLETE_WEAPON_ASSET_PACK'
@@ -458,7 +460,7 @@ def analyze(mods, game_root, toolkit, *, run_dir, inspect=None, log=lambda s:Non
         'excludedNonRootForgeCount':len(excluded_copies)}
     docs['blockReasonStatistics']=dict(reason_counts)
     docs['state']='COMPLETE';docs['unmappedCount']=sum(x['status']!='VERIFIED_LOCAL_TARGET' for x in docs['entries'])
-    docs['blockingUnmappedCount']=sum(x['status'] not in ('VERIFIED_LOCAL_TARGET','IGNORED_SUPPORT_FILE','USER_VARIANT_EXCLUDED')
+    docs['blockingUnmappedCount']=sum(x['status'] not in ('VERIFIED_LOCAL_TARGET','IGNORED_SUPPORT_FILE','USER_VARIANT_EXCLUDED','RUNTIME_AUDIO_PACKAGE')
         for x in docs['entries'])
     docs['ignoredSupportCount']=sum(x['status']=='IGNORED_SUPPORT_FILE' for x in docs['entries'])
     docs['verifiedCount']=len(docs['routes'])

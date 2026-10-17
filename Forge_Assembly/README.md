@@ -22,6 +22,14 @@ In First person & ReShade, select the extracted Native First Person package with
 
 Install reviewed batch uses the saved current stage automatically. Select a staged batch opens in that stage's folder with its batch JSON preselected. Startup cleanup removes abandoned archive/extraction copies; retired run reports move to `workspace/diagnostics/run_history`, leaving only the current build folder in `workspace/auto_runs`.
 
+## Suppressors and audio
+
+The WABO suppressor setting is independent of difficulty. Normal is the default: the author's guide gives approximately 20–30 m for subsonic weapons and 100–200 m for supersonic weapons. Hard and Realistic remain available when their files are present. Enemy hearing settings can cap these ranges. Selecting a custom suppressor preset installs both the mandatory author core and the matching preset, and replaces the overlapping difficulty muzzle/UI definitions. Weapon caliber, velocity, Hardcore health and damage choices continue through the existing authored weapon merge. This uses the author's preset bytes rather than calculating new suppression values.
+
+The runtime stage installs both recognized sound banks into `sounddata/pc`: AWSO's `soundspc_sfx.pck` and hit-sound removal's `soundspc_sfx_wea_.pck`. They are independently checked, included in completeness reports and backed up for rollback. If two mods supply different versions of the same bank, choose an explicit mod priority; complete banks are not merged arbitrarily. A private install and rollback of both supplied banks passed. Actual sound and detection behavior still needs checking in gameplay after the new stage is installed.
+
+Scrolling over an option box scrolls its enclosing page without changing the selection. This applies to the main settings pages and their nested FPV/gameplay panes.
+
 ## Workspace storage
 
 Scan & stage cleans disposable extraction, readback and intermediate Forge files before and after each build, including failed builds. Verified composition steps also release scratch files immediately. Reports remain available for diagnosis. Cleanup supports Windows paths longer than 260 characters and never follows junctions or symbolic links.

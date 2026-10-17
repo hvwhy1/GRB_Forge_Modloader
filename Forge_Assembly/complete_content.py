@@ -19,6 +19,9 @@ def inventory(mods):
     for key,mod in mods.items():
         if not mod.get('enabled',True):continue
         if Path(mod['archive']).name.lower().startswith('wabo compatibility tool-'):continue
+        if '-1585-' in key:
+            from gameplay_options import validate_suppressor_package
+            validate_suppressor_package(mod['members'],mm.load(mm.CONFIG,{}))
         archive_hash=be.sha256(mod['archive'])
         for member in mod['members']:
             if rules.excluded_variant(mod['archive'],member) or policy.held_route(mod['archive'],member):continue
@@ -81,12 +84,13 @@ def verified_loose(mods,game):
     game=Path(game);rows=[]
     for key,mod in mods.items():
         if not mod.get('enabled',True):continue
-        audio='-1245-' in key;hud=key.lower().startswith('grbno-hud-no-effectsfix')
+        import audio_packages
+        audio=any(audio_packages.target_for(m,game) for m in mod['members']);hud=key.lower().startswith('grbno-hud-no-effectsfix')
         if not (audio or hud):continue
         archive_hash=be.sha256(mod['archive'])
         for member in mod['members']:
             leaf=Path(member.replace('\\','/')).name
-            if audio and leaf=='soundspc_sfx_wea_.pck':target=game/'sounddata/pc'/leaf
+            if audio_packages.target_for(member,game):target=audio_packages.target_for(member,game)
             elif hud and leaf in ('ShaderToggler.addon64','ShaderToggler.ini'):target=game/leaf
             elif hud and leaf=='dxgi.dll':target=game/'dxgi.dll'
             else:continue

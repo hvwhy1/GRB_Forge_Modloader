@@ -248,6 +248,8 @@ def merge_panel(parent,owner):
             ttk.Combobox(frame,textvariable=controls[key],values=values,state='readonly',width=35).grid(row=row,column=1,sticky='ew',pady=8);row+=1
         if not options:
             ttk.Label(frame,text='No gameplay settings detected. Add or enable mods in Mod library, then refresh here.').grid(row=row,column=0,columnspan=2,sticky='w',pady=8);row+=1
+        if 'suppressor_profile' in controls:
+            ttk.Label(frame,text='Suppressor presets keep the authored caliber differences. Normal: roughly 20-30 m subsonic / 100-200 m supersonic; Hard: 30-40 / 300-400 m; Realistic: 35-50 / 550-750 m. Enemy hearing settings can cap these ranges. This changes enemy detection; audio packages change the sounds you hear.',wraplength=740).grid(row=row,column=0,columnspan=2,sticky='w',pady=8);row+=1
         vision=next((o[2] for o in options if o[0]=='thermal_priority'),[])
         if 'Pathfinder white thermal vision' in vision:
             controls['preserve_night_vision']=tk.BooleanVar(value=cfg.get('preserve_night_vision',True))

@@ -20,7 +20,10 @@ def explain(error,work):
             except (OSError,ValueError,TypeError,KeyError):pass
     technical=raw+'\n'+str(doc.get('error',''))
     title='Operation stopped';message='The operation could not finish. Open the diagnostic report for details, then retry after correcting the reported problem.'
-    if 'FPV_PACKAGE_CHOICE:' in technical:
+    if 'WABO suppressor preset is incomplete:' in technical:
+        title='The suppressor preset needs its core files'
+        message='The selected WABO suppressor preset requires both its author-supplied core and preset files. Check the WABO archive, then choose an available Suppressor preset in Conflicts & new assets and scan again.'
+    elif 'FPV_PACKAGE_CHOICE:' in technical:
         title='Choose an FPV package'
         message='More than one complete Native First Person package was found. In First person & ReShade, use Find first-person package and select the intended package from the dropdown, then click Install FPV. Multiple copies are never mixed together.'
     elif 'FPV_PACKAGE_INCOMPLETE:' in technical:

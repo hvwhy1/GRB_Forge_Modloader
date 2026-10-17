@@ -37,7 +37,8 @@ def allowed(relative):
     relative=Path(relative)
     if relative.is_absolute() or '..' in relative.parts:return False
     if len(relative.parts)==1:return relative.name in FORGES|RUNTIME or relative.suffix.lower()=='.ini'
-    return relative.parts[0] in {'NativeFirstPersonOptions','reshade-shaders'} or relative.as_posix()=='sounddata/pc/soundspc_sfx_wea_.pck'
+    from audio_packages import AUDIO_FILES
+    return relative.parts[0] in {'NativeFirstPersonOptions','reshade-shaders'} or relative.as_posix() in {'sounddata/pc/'+name for name in AUDIO_FILES}
 
 def capture(game,sources,folder,notify=print):
     game=Path(game).resolve();folder=Path(folder).resolve();folder.mkdir(parents=True,exist_ok=True)
@@ -52,8 +53,10 @@ def capture(game,sources,folder,notify=print):
     loose=[game/n for n in RUNTIME]+list(game.glob('*.ini'))
     for directory in ('NativeFirstPersonOptions','reshade-shaders'):
         loose.extend(p for p in ci.walk([game/directory]) if p.is_file())
-    audio=game/'sounddata/pc/soundspc_sfx_wea_.pck'
-    if audio.is_file():loose.append(audio)
+    from audio_packages import AUDIO_FILES
+    for name in sorted(AUDIO_FILES):
+        audio=game/'sounddata/pc'/name
+        if audio.is_file():loose.append(audio)
     for source in sorted(set(loose)):
         if not source.is_file():continue
         relative=source.relative_to(game)
