@@ -128,7 +128,7 @@ def rotate(manifest,installation,backups,baseline_receipt,configuration=None,not
     config_rows={r['target']:r for r in runtime.get('files',[])}
     ownership={r['target'] for _,doc in history for r in doc.get('files',[]) if runtime_history.safe_target(game,r['target'])}
     changes={r['target']:r for r in actual.get('files',[])}
-    no_change=not changes and not config_rows and (base/'LastWorking/INSTALL_TRANSACTION.json').is_file()
+    no_change=not changes and not any(r.get('originalSha256')!=r.get('installedSha256') for r in config_rows.values()) and (base/'LastWorking/INSTALL_TRANSACTION.json').is_file()
     last_forges={r['target']:r for r in mm.load(base/'LastWorking/INSTALL_TRANSACTION.json',{}).get('files',[])}
     last_runtime={r['target']:r for r in mm.load(base/'LastWorking/CONFIG_TRANSACTION.json',{}).get('files',[])}
     slots={name:base/(name+'.pending-'+uuid.uuid4().hex[:6]) for name in ('Baseline','LastWorking')}

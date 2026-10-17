@@ -200,7 +200,7 @@ def install_files(plan,game,backups,game_check=be.game_processes_running):
         if item.get('remove') and old is not None and old!=item.get('expectedSha256'):raise ValueError('Loader changed; refusing removal')
         if target.suffix.casefold()=='.dll' and old and old!=new and not item.get('remove') and not item.get('allowProxyReplace'):
             raise ValueError('Existing DLL conflict: '+target.name)
-        prepared.append((target,old,new,data))
+        prepared.append((target,old,new,data,bool(item.get('captureCurrent'))))
     folder=backups/('CONFIG_'+time.strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:6]);folder.mkdir(parents=True)
     tx={'status':'PREPARING','gameRoot':str(game),'files':[]}
     # Keep explicit links to earlier configuration backups for removed-mod cleanup.
@@ -214,11 +214,12 @@ def install_files(plan,game,backups,game_check=be.game_processes_running):
     receipt=folder/'CONFIG_TRANSACTION.json';swapped=[]
     try:
         be.record_json(receipt,tx)
-        for target,old,new,data in prepared:
-            if old==new:continue
+        for target,old,new,data,capture in prepared:
+            if old==new and not capture:continue
             backup=folder/'Originals'/target.relative_to(game)
             if old:be._copy_verify(target,backup,old)
             record={'target':str(target),'backup':str(backup) if old else None,'originalSha256':old,'installedSha256':new}
+            if old==new:record['snapshotOnly']=True
             tx['files'].append(record)
         # Preparation has not changed the game. Publish the complete recovery
         # journal once, before the first replacement, rather than once per shader.
@@ -227,7 +228,8 @@ def install_files(plan,game,backups,game_check=be.game_processes_running):
             if game_check():raise RuntimeError('Game opened during configuration installation')
             target=Path(record['target']);current=be.sha256(target) if target.is_file() else None
             if current!=record['originalSha256']:raise ValueError('Destination changed during installation')
-            data=next(d for p,o,n,d in prepared if p==target)
+            if record.get('snapshotOnly'):continue
+            data=next(d for p,o,n,d,c in prepared if p==target)
             target.parent.mkdir(parents=True,exist_ok=True)
             if data is None:target.unlink()
             else:

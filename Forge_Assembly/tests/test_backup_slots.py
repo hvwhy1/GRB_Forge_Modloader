@@ -5,6 +5,23 @@ import backup_slots as slots,batch_engine as be,mod_manager as mm,deployment_pol
 
 
 class BackupSlotTests(unittest.TestCase):
+ def test_current_reshade_preferences_can_be_snapshotted_without_rewriting_them(self):
+  import config_install as ci
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);work=root/'workspace';work.mkdir();game=root/'game';game.mkdir();(game/'GRB.exe').write_bytes(b'exe');base=work/'backups'
+   target=game/'DEEF_ReShade_Preset.ini';target.write_bytes(b'original');other=game/'shader.fx'
+   be.record_json(work/'recovery_state.json',{'baselineId':'base','installationPaused':False,'gameRoot':str(game),'hashes':{}})
+   with patch.object(mm,'WORK',work),patch.object(mm,'CONFIG',work/'settings.json'),patch.object(policy,'STATE',work/'recovery_state.json'):
+    ci.install_files([{'target':str(target),'content':'installed'}],game,base,game_check=lambda:[])
+    target.write_bytes(b'user changed effects');before=target.stat().st_mtime_ns
+    receipt=ci.install_files([{'target':str(target),'source':str(target),'captureCurrent':True},{'target':str(other),'content':'repaired shader'}],game,base,game_check=lambda:[])
+    self.assertEqual(target.stat().st_mtime_ns,before);self.assertEqual(target.read_bytes(),b'user changed effects')
+    doc=mm.load(base/'Baseline/CONFIG_TRANSACTION.json',{})
+    self.assertEqual(next(r['installedSha256'] for r in doc['files'] if r['target']==str(target)),be.sha256(target))
+    ci.restore_files(receipt,game_check=lambda:[])
+    self.assertEqual(target.read_bytes(),b'user changed effects');self.assertFalse(other.exists())
+    ci.restore_files(base/'Baseline/CONFIG_TRANSACTION.json',game_check=lambda:[])
+    self.assertEqual(target.read_bytes(),b'original')
  def test_three_installs_keep_only_baseline_and_previous_full_build_and_runtime(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);work=root/'workspace';work.mkdir();game=root/'game';game.mkdir();(game/'GRB.exe').write_bytes(b'exe')

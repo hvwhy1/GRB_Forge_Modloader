@@ -190,11 +190,11 @@ def prepare(setup,game,preset='',shader_folder='',fetch_effects=True,notify=lamb
     rows.extend(cleanup)
     shader_compatibility(rows)
     if preset_file:
-        preset_target=game/'DEEF_ReShade_Preset.ini';rows.append({'source':str(preset_file),'target':str(preset_target)})
+        preset_target=game/'DEEF_ReShade_Preset.ini';rows.append({'source':str(preset_file),'target':str(preset_target),'captureCurrent':True})
     else:preset_target=game/'DEEF_ReShade_Preset.ini';rows.append({'target':str(preset_target),'content':'Techniques=\nTechniqueSorting=\n'})
     config=game/'ReShade.ini';text=ci.read_ini(config)[0] if config.is_file() else ''
     text=ci.patch_ini_values(text,'GENERAL',{'EffectSearchPaths':'.\\reshade-shaders\\Shaders\\**','TextureSearchPaths':'.\\reshade-shaders\\Textures\\**','PresetPath':'.\\'+preset_target.name})
-    rows.append({'target':str(config),'content':text,'encoding':'utf-8'})
+    rows.append({'target':str(config),'content':text,'encoding':'utf-8','captureCurrent':True})
     if target.name=='d3d11_chain.dll':rows.append({'target':str(game/'d3d11_chain.ini'),'content':text,'encoding':'utf-8'})
     be.record_json(folder/'PLAN.json',{'setup':str(setup),'runtimeOverride':str(runtime_override),'runtimeSha256':be.sha256(runtime),'target':str(target),'activeEffects':sorted(needed),'suppliedShaderPackages':sorted(families),'files':rows})
     return rows
