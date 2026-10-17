@@ -149,7 +149,7 @@ class LifecycleTests(unittest.TestCase):
     (run/'resource.data').write_bytes(b'temp');(run/'PROOF.json').write_text('{}');raise ValueError('packing failed')
    with patch.object(auto.mm,'WORK',w),patch.object(auto.mm,'CONFIG',w/'settings.json'),patch('storage_guard.session',return_value=contextlib.nullcontext()),patch.object(auto,'_perform_unmanaged',side_effect=fail):
     with self.assertRaisesRegex(ValueError,'packing failed'):auto._perform(notify=lambda _:None)
-   self.assertFalse((run/'resource.data').exists());self.assertTrue((run/'PROOF.json').exists())
+   self.assertFalse((run/'resource.data').exists());self.assertTrue(ws.history_path(w,run/'PROOF.json').exists())
 
 class SingleStageTests(unittest.TestCase):
  def stage(self,w,name):
@@ -163,8 +163,9 @@ class SingleStageTests(unittest.TestCase):
    w=Path(d);old,old_output=self.stage(w,'old');current,output=self.stage(w,'current')
    with patch('existing_stage.inspect_existing_stage'):
     result=ws.cleanup(w,{'last_stage_manifest':str(current),'last_confirmed_archive_manifest':str(old)})
-   self.assertTrue(output.exists());self.assertFalse(old_output.exists());self.assertTrue(old.exists())
+   self.assertTrue(output.exists());self.assertFalse(old_output.exists());self.assertFalse(old.exists());self.assertTrue(ws.history_path(w,old).exists())
    self.assertEqual(result['retainedStages'],[str(current)])
+   self.assertEqual([p.name for p in (w/'auto_runs').iterdir()],['current'])
  def test_new_stage_keeps_required_resource_dependencies_only(self):
   with tempfile.TemporaryDirectory() as d:
    w=Path(d);old,old_output=self.stage(w,'old');new,output=self.stage(w,'new');resource,resource_output=self.stage(w,'resource')
@@ -188,7 +189,7 @@ class SingleStageTests(unittest.TestCase):
    cfg=w/'settings.json';cfg.write_text(json.dumps({'last_stage_manifest':str(current)}))
    with patch.object(auto.mm,'WORK',w),patch.object(auto.mm,'CONFIG',cfg),patch('storage_guard.session',return_value=contextlib.nullcontext()),patch.object(auto,'_perform_unmanaged',return_value=(diagnostic.parent,{'batch':str(diagnostic)})),patch('existing_stage.inspect_existing_stage'):
     auto._perform(_retain_stage=False,notify=lambda _:None)
-   self.assertTrue(output.exists());self.assertFalse(diagnostic_output.exists());self.assertTrue(diagnostic.exists())
+   self.assertTrue(output.exists());self.assertFalse(diagnostic_output.exists());self.assertFalse(diagnostic.exists());self.assertTrue(ws.history_path(w,diagnostic).exists())
    self.assertEqual(ws.read(cfg)['last_stage_manifest'],str(current))
  def test_successful_build_saves_new_selection_before_retiring_previous(self):
   import auto_setup_gui as auto,contextlib
@@ -207,7 +208,22 @@ class SingleStageTests(unittest.TestCase):
    with patch('existing_stage.inspect_existing_stage'):
     result=ws.cleanup(w,{'last_stage_manifest':str(current)})
    self.assertTrue(output.exists());self.assertFalse(run.exists())
-   archived=w/'diagnostics/abandoned_runs/interrupted/AUTO_SETUP_RESULT.json'
+   archived=w/'diagnostics/run_history/interrupted/AUTO_SETUP_RESULT.json'
    self.assertTrue(archived.exists());self.assertEqual(result['archivedAbandonedRuns'],[str(archived.parent)])
+ def test_recovery_follows_links_through_retired_run_reports(self):
+  import layered_pipeline as lp,deployment_policy as policy
+  with tempfile.TemporaryDirectory() as d:
+   w=Path(d);current,output=self.stage(w,'current');old,old_output=self.stage(w,'old')
+   game=w/'game';game.mkdir()
+   original=w/'backups/previous/INSTALL_TRANSACTION.json';original.parent.mkdir(parents=True)
+   backup=original.parent/'original.forge';backup.write_bytes(b'clean')
+   original.write_text(json.dumps({'gameRoot':str(game),'files':[{'backup':str(backup),'target':str(game/'data.forge')}]}))
+   old_doc=ws.read(old);old_doc.update(plan={'gameRoot':str(game)},outputs={'data':{'previousTransaction':str(original)}});old.write_text(json.dumps(old_doc))
+   tx=w/'backups/latest/INSTALL_TRANSACTION.json';tx.parent.mkdir(parents=True)
+   tx.write_text(json.dumps({'gameRoot':str(game),'batchManifest':str(old)}))
+   with patch('existing_stage.inspect_existing_stage'):ws.cleanup(w,{'last_stage_manifest':str(current),'last_transaction':str(tx)})
+   self.assertFalse(old.parent.exists());self.assertTrue(ws.history_path(w,old).is_file())
+   with patch.object(policy,'WORK',w):history=lp.receipt_history(game,[str(tx)])
+   self.assertIn(original,[path for path,doc in history]);self.assertTrue(backup.exists())
 
 if __name__=='__main__':unittest.main()

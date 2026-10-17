@@ -76,9 +76,9 @@ def learned_groups(mods,work=None):
     No archive hashing on Tk's thread. The builder rechecks the saved SHA-256
     before using a choice. A replaced archive cannot inherit an unverified winner.
     """
-    work=Path(work or mm.WORK);runs=work/'auto_runs'
-    if not runs.is_dir():return []
-    reports=[p/'CONFLICT_POLICY_REPORT.json' for p in runs.iterdir() if p.is_dir() and (p/'CONFLICT_POLICY_REPORT.json').is_file()]
+    work=Path(work or mm.WORK)
+    reports=[p/'CONFLICT_POLICY_REPORT.json' for root in (work/'auto_runs',work/'diagnostics/run_history') if root.is_dir()
+             for p in root.iterdir() if p.is_dir() and (p/'CONFLICT_POLICY_REPORT.json').is_file()]
     groups={}
     for path in sorted(reports,key=lambda p:p.stat().st_mtime):
         try:doc=json.loads(path.read_text(encoding='utf-8'))

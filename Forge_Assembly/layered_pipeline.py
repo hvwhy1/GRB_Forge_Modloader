@@ -84,7 +84,8 @@ def receipt_history(game, seeds):
     """Follow explicit receipt links, never search arbitrary backup directories."""
     pending=list(seeds);seen=set();documents=[]
     while pending:
-        path=Path(pending.pop(0) or '').resolve()
+        from workspace_storage import history_path
+        path=history_path(policy.WORK,pending.pop(0) or '')
         if path in seen:continue
         if len(seen)>=256:raise ValueError('Backup receipt history exceeds supported depth')
         seen.add(path)

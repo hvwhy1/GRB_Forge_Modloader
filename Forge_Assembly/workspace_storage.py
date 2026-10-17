@@ -64,6 +64,16 @@ def path_key(path):
 
 def read(path):return json.loads(Path(path).read_text(encoding='utf-8'))
 
+
+def history_path(work,path):
+    """Resolve an explicit receipt link after its retired run was archived."""
+    work=Path(work).resolve();path=Path(path).resolve()
+    if path.is_file():return path
+    try:relative=path.relative_to(work/'auto_runs')
+    except ValueError:return path
+    candidate=work/'diagnostics'/'run_history'/relative
+    return candidate if inside(work,candidate) and candidate.is_file() else path
+
 def protected_files(work,cfg,extra_stages=()):
     """Keep deployable outputs, their input view and pinned archive provenance.
 
@@ -179,7 +189,7 @@ def backup_roots_to_retire(work,cfg,stages=()):
             for v in value:yield from links(v,key)
         elif isinstance(value,str) and key.casefold().endswith(('transaction','manifest')) and value.lower().endswith('.json'):yield value
     while pending:
-        p=Path(pending.pop())
+        p=history_path(work,pending.pop())
         if not inside(work,p) or not p.is_file():continue
         p=p.resolve()
         if p in seen:continue
@@ -260,20 +270,17 @@ def usage(work):
 
 
 def archive_abandoned_runs(work,cfg,keep):
-    """Move reports from interrupted attempts out of the staged-build list."""
+    """Keep only the selected build in auto_runs; archive retired reports."""
     work=Path(work).resolve();base=work/'auto_runs';moved=[]
     if not base.is_dir() or base.resolve()!=base:return moved
     for entry in os.scandir(base):
         if not entry.is_dir(follow_symlinks=False) or reparse(entry):continue
-        run=Path(entry.path);report=run/'AUTO_SETUP_RESULT.json'
-        if not report.is_file() or list(run.glob('BATCH_RESULT*.json')):continue
-        doc=read(report)
-        if doc.get('batch') is not None:continue
-        references=list(keep)+[v for v in cfg.values() if isinstance(v,str) and v]
+        run=Path(entry.path)
+        references=list(keep)
         if any(inside(run,p) for p in references):continue
         # Only report-only attempts are moved; an undeleted payload stays visible.
         if any(e is None or Path(e).suffix.casefold() not in TEXT for e in _run_files(run)):continue
-        destination=work/'diagnostics'/'abandoned_runs'/run.name
+        destination=work/'diagnostics'/'run_history'/run.name
         if destination.exists():continue
         if not inside(work,run) or not inside(work,destination) or run.resolve()!=run:raise StorageError('Unsafe abandoned run directory')
         destination.parent.mkdir(parents=True,exist_ok=True)

@@ -20,7 +20,7 @@ Complete base-parent overrides are inserted before entirely new parents, in sepa
 
 In First person & ReShade, select the extracted Native First Person package with `core` and `options`. The installer also accepts its `core` folder, master INI, launcher, or an enclosing folder containing one complete package. Find first-person package lists only complete packages; if several are found, choose one explicitly from the dropdown. Selecting the Forge Assembly installer folder alone does not supply FPV binaries. Package settings are saved after a successful installation. New FPV installations default to the proven single DX11 loader.
 
-Install reviewed batch uses the saved current stage automatically. Select a staged batch opens in that stage's folder with its batch JSON preselected. Startup cleanup removes abandoned archive/extraction copies; report-only interrupted attempts move to `workspace/diagnostics/abandoned_runs`.
+Install reviewed batch uses the saved current stage automatically. Select a staged batch opens in that stage's folder with its batch JSON preselected. Startup cleanup removes abandoned archive/extraction copies; retired run reports move to `workspace/diagnostics/run_history`, leaving only the current build folder in `workspace/auto_runs`.
 
 ## Workspace storage
 
