@@ -1,5 +1,7 @@
 # Forge Assembly
 
+Forge index reads now use bounded blocks (at most 212 KiB of table buffers), and asset composition indexes binary ID/type pairs once instead of scanning every parent for each payload. Duplicate candidates, local-parent precedence, range checks and all packing/readback checks are retained. Tests compare every index entry against the previous reader on five staged Forges and exercise malformed indexes and chunk boundaries. These are component optimizations; a full-stage speedup has not yet been measured. This C# engine update invalidates the previous composition fingerprint once, so the first stage rebuilds before subsequent unchanged outputs can be reused.
+
 ## Build from your mod archives
 
 Run `START_FORGE_ASSEMBLY.cmd`, select your mod archives, then use **Scan & stage** and **Install reviewed batch**. After Ubisoft verification, record a verified baseline first. Scan & stage rebuilds the selected archives; it does not use the saved recovery payload as its source.

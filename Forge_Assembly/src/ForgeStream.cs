@@ -34,16 +34,7 @@ internal static class ForgeStream
             next=r.ReadInt64(); r.ReadInt32(); r.ReadInt32(); long info=r.ReadInt64(); r.ReadInt64();
             if(count<0 || count>total-entries.Count)throw new InvalidDataException("Invalid directory count");
             Range(stream,table,checked(count*20L)); Range(stream,info,checked(count*192L));
-            for(int i=0;i<count;i++) {
-                long t=table+i*20L, m=info+i*192L;
-                stream.Position=t; long offset=r.ReadInt64(); ulong id=r.ReadUInt64(); int size=r.ReadInt32();
-                Range(stream,offset,size); stream.Position=m;
-                if(r.ReadInt32()!=size)throw new InvalidDataException("Inconsistent entry sizes");
-                r.ReadUInt64(); r.ReadInt32(); uint type=r.ReadUInt32(); stream.Position=m+44;
-                byte[] nameBytes=r.ReadBytes(128); int end=Array.IndexOf(nameBytes,(byte)0);
-                string name=Encoding.UTF8.GetString(nameBytes,0,end<0?128:end);
-                entries.Add(new(entries.Count,id,type,name,offset,size,t,m));
-            }
+            ForgeIndexTables.Append(stream,count,table,info,entries);
         }
         if(entries.Count!=total || next!=-1)throw new InvalidDataException("Incomplete directory chain");
         return entries;

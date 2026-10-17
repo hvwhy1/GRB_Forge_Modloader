@@ -18,6 +18,7 @@ internal static class AssetCompose {
             string work=Path.Combine(Path.GetDirectoryName(report!)!,"Composition");Directory.CreateDirectory(work);
             var inventories=new Dictionary<string,List<ForgeStream.Entry>>();
             foreach(string forge in Directory.GetFiles(root,"*.forge")) {using var f=File.OpenRead(forge);inventories[forge]=ForgeStream.Read(f);}
+            var identities=new ForgeIdentityIndex(inventories);
             var rows=new List<object>();var newPayloads=new List<object>();var patchOverrides=new List<object>();var newAuthored=new List<object>();var replacementPayloads=new List<string>();
             var combined=new List<Request>();
             var binaryGroups=requests.GroupBy(v=>{var e=DataFile.CreateForgeEntry(v.payload,0,Game.GhostReconBreakpoint);return (e.ID,e.Extension);}).ToArray();
@@ -30,8 +31,8 @@ internal static class AssetCompose {
                 if(exclusive.Length==1){combined.Add(exclusive[0]);rows.Add(new{state="EXCLUSIVE_CONTAINER_VARIANT_SELECTION",winner=new{exclusive[0].mod,exclusive[0].member},excluded=variants.Where(v=>v!=exclusive[0]).Select(v=>new{v.mod,v.member}),objectUnion=false});continue;}
                 if(variants.Where(v=>v.mod!="").GroupBy(v=>v.mod).Any(g=>g.Count()>1))throw new IOException("SAME_ARCHIVE_CONTAINER_VARIANTS_NEED_EXACT_CHOICE: "+variants[0].name);
 
-                var local=inventories[source].Where(e=>e.Id==group.Key.ID&&e.Type==group.Key.Extension).Select(e=>(forge:source,entry:e)).ToArray();
-                var candidates=local.Length>0?local:inventories.Where(k=>k.Key!=source).SelectMany(k=>k.Value.Where(e=>e.Id==group.Key.ID&&e.Type==group.Key.Extension).Select(e=>(forge:k.Key,entry:e))).ToArray();
+                var local=identities.Local(source,group.Key.ID,group.Key.Extension);
+                var candidates=identities.Find(source,group.Key.ID,group.Key.Extension);
                 if(candidates.Length>1) {
                     string Digest((string forge,ForgeStream.Entry entry) c){using var f=File.OpenRead(c.forge);return ForgeStream.HashRange(f,c.entry.Offset,c.entry.Length);}
                     if(local.Length>1||candidates.Select(Digest).Distinct().Count()!=1)throw new IOException("Ambiguous parent for container conflict merge");
@@ -54,10 +55,9 @@ internal static class AssetCompose {
                     rows.Add(new{name=item.name,state="IDENTICAL_SHARED_PAYLOAD",identity=meta.ID.ToString("X16")});continue;
                 }
                 seen[key]=(payload,sha);
-                var local=inventories[source].Where(e=>e.Id==meta.ID&&e.Type==meta.Extension).ToArray();
+                var local=identities.Local(source,meta.ID,meta.Extension);
                 if(local.Length>1)throw new IOException("Duplicate target container ID");
-                var candidates=local.Select(e=>(forge:source,entry:e)).ToArray();
-                if(candidates.Length==0)candidates=inventories.Where(k=>k.Key!=source).SelectMany(k=>k.Value.Where(e=>e.Id==meta.ID&&e.Type==meta.Extension).Select(e=>(forge:k.Key,entry:e))).ToArray();
+                var candidates=identities.Find(source,meta.ID,meta.Extension);
                 if(candidates.Length>1) {
                     string Digest((string forge,ForgeStream.Entry entry) c) {using var f=File.OpenRead(c.forge);return ForgeStream.HashRange(f,c.entry.Offset,c.entry.Length);}
                     if(candidates.Select(Digest).Distinct().Count()!=1)throw new IOException("BASE_PARENT_SAME_ID_DIFFERENT_PAYLOAD: "+item.name);
