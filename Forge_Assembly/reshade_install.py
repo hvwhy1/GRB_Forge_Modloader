@@ -85,6 +85,46 @@ def addon_runtime(path):
     return data
 
 
+def supplied_package_cleanup(rows,game,families):
+    """Retire only receipt-owned extras inside explicitly supplied packages."""
+    if not families:return []
+    from layered_pipeline import receipt_history
+    cfg=mm.load(mm.CONFIG,{})
+    seeds=[cfg.get('baseline_config_transaction'),cfg.get('last_config_transaction')]
+    shader_root=Path(game).resolve()/'reshade-shaders/Shaders'
+    planned={Path(r['target']).resolve() for r in rows};owned={}
+    for receipt,doc in receipt_history(game,seeds):
+        if receipt.name!='CONFIG_TRANSACTION.json' or doc.get('status')!='INSTALLED':continue
+        for row in doc.get('files',[]):
+            target=Path(row['target']).resolve()
+            try:parts=target.relative_to(shader_root).parts
+            except ValueError:continue
+            if target not in planned and len(parts)>1 and parts[0].casefold() in families:
+                owned.setdefault(target,set()).add(row.get('installedSha256'))
+    result=[]
+    for target,known in owned.items():
+        if not target.is_file():continue
+        live=be.sha256(target)
+        if live not in known:raise ValueError('Managed shader changed outside the installer; package cleanup stopped: '+str(target))
+        # Explicitly selecting a package replaces its effect set. Preserve any
+        # earlier copies in recovery, rather than restoring incompatible extras
+        # back into the active search path.
+        result.append({'target':str(target),'remove':True,'expectedSha256':live})
+    return result
+
+
+def shader_compatibility(rows):
+    # RECORDED and PPFX_Bloom both declare global texColor, with different
+    # semantics. ReShade shares that name across effects. Give only RECORDED's
+    # private render target a unique identifier; preserve techniques/uniforms.
+    for row in rows:
+        target=Path(row['target'])
+        if target.name.casefold()!='recorded.fx' or 'source' not in row:continue
+        text=ci.read_ini(row['source'])[0]
+        if re.search(r'\btexture\s+texColor\s*\{',text) and re.search(r'\bRenderTarget\s*=\s*texColor\b',text):
+            row['content']=re.sub(r'\btexColor\b','FA_RecordedSceneColor',text);row['encoding']='utf-8'
+
+
 def prepare(setup,game,preset='',shader_folder='',fetch_effects=True,notify=lambda s:None,fetch=download,runtime_override=''):
     game=Path(game).resolve();setup=Path(setup).resolve();folder=mm.WORK/'reshade_stages'/uuid.uuid4().hex[:12];folder.mkdir(parents=True)
     if not setup.is_file():raise ValueError('Choose the official ReShade setup executable')
@@ -113,7 +153,7 @@ def prepare(setup,game,preset='',shader_folder='',fetch_effects=True,notify=lamb
                 rows.append({'source':str(mm.extraction_target(archive,name,archive_hash=fingerprint)),'target':str(game/name)})
     preset_file=resolve_preset(preset) if preset else None
     preset_text=ci.read_ini(preset_file)[0] if preset_file else ''
-    needed=active_effects(preset_text);staged={};local_rows={}
+    needed=active_effects(preset_text);staged={};local_rows={};families=set()
     if shader_folder:
         local=Path(shader_folder).resolve()
         if not local.is_dir():raise ValueError('Shader / texture folder does not exist: '+str(local))
@@ -123,6 +163,7 @@ def prepare(setup,game,preset='',shader_folder='',fetch_effects=True,notify=lamb
             index=next((i for i,p in enumerate(parts) if p.casefold() in ('shaders','textures')),None)
             if index is None:continue
             category='Shaders' if parts[index].casefold()=='shaders' else 'Textures'
+            if category=='Shaders' and len(parts)>index+2:families.add(parts[index+1].casefold())
             rel=Path('reshade-shaders')/category/Path(*parts[index+1:]);local_rows[rel.as_posix().casefold()]={'source':str(file),'target':str(game/rel)}
     if fetch_effects:
         manifest=configparser.ConfigParser(interpolation=None);manifest.read_string(fetch(MANIFEST).decode('utf-8-sig'))
@@ -131,7 +172,9 @@ def prepare(setup,game,preset='',shader_folder='',fetch_effects=True,notify=lamb
             notify('Downloading '+manifest.get(section,'PackageName')+' shader package')
             data=fetch(manifest.get(section,'DownloadUrl'))
             for file in extract_shaders(data,folder,manifest.get(section,'InstallPath'),manifest.get(section,'TextureInstallPath')):
-                rel=file.relative_to(folder);staged[rel.as_posix().casefold()]={'source':str(file),'target':str(game/rel)}
+                rel=file.relative_to(folder)
+                if len(rel.parts)>3 and rel.parts[1].casefold()=='shaders' and rel.parts[2].casefold() in families:continue
+                staged[rel.as_posix().casefold()]={'source':str(file),'target':str(game/rel)}
     # Download dependencies without overwriting an explicitly supplied local pack.
     staged.update(local_rows)
     available={Path(r['target']).name for r in staged.values()}
@@ -139,6 +182,13 @@ def prepare(setup,game,preset='',shader_folder='',fetch_effects=True,notify=lamb
     missing=needed-available
     if missing:raise ValueError('Preset requires unavailable effects: '+', '.join(sorted(missing))+'; select its shader folder')
     rows.extend(staged.values())
+    cleanup=supplied_package_cleanup(rows,game,families)
+    removed={Path(r['target']).name for r in cleanup if r.get('remove')}
+    supplied={Path(r['target']).name for r in rows}
+    missing=needed & (removed-supplied)
+    if missing:raise ValueError('Supplied shader package is missing active effects: '+', '.join(sorted(missing)))
+    rows.extend(cleanup)
+    shader_compatibility(rows)
     if preset_file:
         preset_target=game/'DEEF_ReShade_Preset.ini';rows.append({'source':str(preset_file),'target':str(preset_target)})
     else:preset_target=game/'DEEF_ReShade_Preset.ini';rows.append({'target':str(preset_target),'content':'Techniques=\nTechniqueSorting=\n'})
@@ -146,7 +196,7 @@ def prepare(setup,game,preset='',shader_folder='',fetch_effects=True,notify=lamb
     text=ci.patch_ini_values(text,'GENERAL',{'EffectSearchPaths':'.\\reshade-shaders\\Shaders\\**','TextureSearchPaths':'.\\reshade-shaders\\Textures\\**','PresetPath':'.\\'+preset_target.name})
     rows.append({'target':str(config),'content':text,'encoding':'utf-8'})
     if target.name=='d3d11_chain.dll':rows.append({'target':str(game/'d3d11_chain.ini'),'content':text,'encoding':'utf-8'})
-    be.record_json(folder/'PLAN.json',{'setup':str(setup),'runtimeOverride':str(runtime_override),'runtimeSha256':be.sha256(runtime),'target':str(target),'activeEffects':sorted(needed),'files':rows})
+    be.record_json(folder/'PLAN.json',{'setup':str(setup),'runtimeOverride':str(runtime_override),'runtimeSha256':be.sha256(runtime),'target':str(target),'activeEffects':sorted(needed),'suppliedShaderPackages':sorted(families),'files':rows})
     return rows
 
 

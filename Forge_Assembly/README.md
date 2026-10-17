@@ -93,7 +93,9 @@ Receipt writes use bounded retries for temporary Windows access/sharing locks wh
 
 Recovery-folder publication and rollback also retry temporary Windows sharing locks. A blocked folder is reported separately from a locked game file. Local ReShade packs take priority over downloaded copies; select the parent reshade-shaders folder or either Shaders / Textures subfolder.
 
-Regression coverage for this revision: 218 tests run, one platform-dependent skip. Private tests cover repeated updates and phase ordering, resource-proof export/install, source changes and global lookups, removal and vanilla restoration, corrupt-stage rejection, one-stage cleanup, three successive installs, standalone config installs, repeated configuration versions, idempotent backups and restoring prior Forge/runtime bytes from a known clean game. A real two-pass laser stage reused its verified Forge on the second pass, retained one stage, produced the same output hash and left the source game untouched.
+Supplied shader package folders are kept as a unit: downloaded effects cannot be combined with older supplied headers. Superseded extras are retired only when installer receipts own and verify them; untracked files are preserved. RECORDED receives a unique internal render-target name to avoid its texColor collision with PPFX_Bloom, retaining technique and uniform names.
+
+Regression coverage for this revision: 220 tests run, one platform-dependent skip. Private tests cover repeated updates and phase ordering, resource-proof export/install, source changes and global lookups, removal and vanilla restoration, corrupt-stage rejection, one-stage cleanup, three successive installs, standalone config installs, repeated configuration versions, idempotent backups and restoring prior Forge/runtime bytes from a known clean game. A real two-pass laser stage reused its verified Forge on the second pass, retained one stage, produced the same output hash and left the source game untouched.
 
 ## Performance and verification
 

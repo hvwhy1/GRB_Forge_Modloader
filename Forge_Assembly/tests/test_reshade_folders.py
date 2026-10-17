@@ -2,6 +2,8 @@ import io,tempfile,unittest,zipfile
 from pathlib import Path
 from unittest.mock import patch
 import reshade_install as ri,config_install as ci,mod_manager as mm
+import batch_engine as be
+import deployment_policy as policy
 
 
 class ShaderFolderTests(unittest.TestCase):
@@ -44,6 +46,36 @@ class ShaderFolderTests(unittest.TestCase):
    root=Path(d);game,work,setup,local=self.fixture(root)
    with patch.object(mm,'WORK',work),self.assertRaisesRegex(ValueError,'folder does not exist'):
     ri.prepare(setup,game,shader_folder=root/'missing',fetch_effects=False)
+
+ def test_supplied_package_does_not_mix_new_effects_with_old_headers(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);game,work,setup,local=self.fixture(root)
+   package=local/'Shaders/CShade';(package/'shared').mkdir(parents=True)
+   (package/'cOverlay.fx').write_text('old matching effect');(package/'shared/cShade.fxh').write_text('old matching header')
+   extra=game/'reshade-shaders/Shaders/CShade/cBloom.fx';extra.parent.mkdir(parents=True);extra.write_text('incompatible newer effect')
+   untouched=extra.with_name('UserExtra.fx');untouched.write_text('untracked')
+   receipt=work/'backups/Baseline/CONFIG_TRANSACTION.json'
+   be.record_json(receipt,{'status':'INSTALLED','gameRoot':str(game),'files':[{'target':str(extra),'originalSha256':None,'backup':None,'installedSha256':be.sha256(extra)}]})
+   be.record_json(work/'settings.json',{'baseline_config_transaction':str(receipt)})
+   data=io.BytesIO()
+   with zipfile.ZipFile(data,'w') as archive:
+    archive.writestr('repo/Shaders/cBloom.fx',b'new effect');archive.writestr('repo/Shaders/shared/cShade.fxh',b'new header')
+   manifest=b'[cshade]\nRequired=1\nPackageName=CShade\nDownloadUrl=https://github.com/test/archive/main.zip\nInstallPath=reshade-shaders/Shaders/CShade\nTextureInstallPath=reshade-shaders/Textures/CShade\n'
+   with patch.object(mm,'WORK',work),patch.object(mm,'CONFIG',work/'settings.json'),patch.object(policy,'WORK',work):
+    rows=ri.prepare(setup,game,shader_folder=local,fetch=lambda url:manifest if url==ri.MANIFEST else data.getvalue())
+    extra_rows=[r for r in rows if Path(r['target'])==extra];self.assertEqual(len(extra_rows),1);self.assertTrue(extra_rows[0]['remove'])
+    self.assertFalse(any(Path(r['target'])==untouched for r in rows))
+    ci.install_files(rows,game,root/'backups',game_check=lambda:[])
+   self.assertFalse(extra.exists());self.assertEqual(untouched.read_text(),'untracked')
+   self.assertEqual((extra.parent/'shared/cShade.fxh').read_text(),'old matching header')
+
+ def test_recorded_render_target_is_unique_without_changing_uniforms_or_source(self):
+  with tempfile.TemporaryDirectory() as d:
+   source=Path(d)/'RECORDED.fx';text='texture texColor { Width=10; };\nsampler s { Texture=texColor; };\nuniform float Strength=1;\ntechnique REC { pass { RenderTarget=texColor; } }'
+   source.write_text(text);row={'source':str(source),'target':str(source)};ri.shader_compatibility([row])
+   self.assertEqual(source.read_text(),text);self.assertNotIn('texColor',row['content'])
+   self.assertIn('uniform float Strength=1;',row['content']);self.assertIn('technique REC',row['content'])
+   self.assertEqual(row['content'].count('FA_RecordedSceneColor'),3)
 
 
 if __name__=='__main__':unittest.main()
