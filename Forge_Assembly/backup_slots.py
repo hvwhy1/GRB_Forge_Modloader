@@ -49,7 +49,7 @@ def after_config(receipt,game,backups):
         folder=base/('CONFIG_BASELINE_'+uuid.uuid4().hex[:6]);folder.mkdir()
         anchor=folder/'INSTALL_TRANSACTION.json'
         be.record_json(anchor,{'status':'INSTALLED','gameRoot':str(Path(game).resolve()),'files':[]})
-    rotate(None,None,base,anchor,receipt)
+    rotate(None,None,base,anchor,receipt,runtime_only=True)
     return base/'LastWorking/CONFIG_TRANSACTION.json'
 
 
@@ -114,7 +114,7 @@ def after_proven(manifest,receipt,backups):
     return rotate(None,receipt,base,anchor)
 
 
-def rotate(manifest,installation,backups,baseline_receipt,configuration=None,notify=lambda _:None):
+def rotate(manifest,installation,backups,baseline_receipt,configuration=None,notify=lambda _:None,*,runtime_only=False):
     import deployment_policy as policy,layered_pipeline as lp,runtime_history,workspace_storage as ws
     base=Path(backups).resolve();work=mm.WORK.resolve();cfg=mm.load(mm.CONFIG,{})
     if not be.within(work,base):return Path(baseline_receipt)
@@ -132,7 +132,7 @@ def rotate(manifest,installation,backups,baseline_receipt,configuration=None,not
     last_forges={r['target']:r for r in mm.load(base/'LastWorking/INSTALL_TRANSACTION.json',{}).get('files',[])}
     last_runtime={r['target']:r for r in mm.load(base/'LastWorking/CONFIG_TRANSACTION.json',{}).get('files',[])}
     slots={name:base/(name+'.pending-'+uuid.uuid4().hex[:6]) for name in ('Baseline','LastWorking')}
-    retired={};published=[];rewrites={};original_cfg=copy.deepcopy(cfg)
+    retired={};published=[];rewrites={};original_cfg=copy.deepcopy(cfg);carried_docs={}
     usage=None;copied=0
     for folder in slots.values():folder.mkdir(parents=True)
     def copy_verified(origin,pending,digest):
@@ -162,9 +162,33 @@ def rotate(manifest,installation,backups,baseline_receipt,configuration=None,not
                 except OSError:copy_verified(origin,pending,original)
                 if be.sha256(pending)!=original:raise ValueError('Recovery slot hash mismatch')
         return {'target':target,'backup':str(final) if original is not None else None,'originalSha256':original,'installedSha256':current}
+    def carry_forges(name):
+        # Runtime installs do not change Forges. Preserve their existing recovery
+        # generations without reading live game archives or rehashing gigabytes.
+        # Linking the immutable backup object preserves the exact same bytes.
+        receipt=base/name/'INSTALL_TRANSACTION.json'
+        doc=mm.load(receipt,{}) if receipt.is_file() else baseline_doc
+        if doc.get('status') not in ('INSTALLED','RESTORED') or Path(doc['gameRoot']).resolve()!=game:
+            raise ValueError('Forge recovery receipt is not ready; existing backups retained')
+        carried_docs[name]=doc
+        rows=[]
+        for row in doc.get('files',[]):
+            target=Path(row['target']).resolve();digest=row.get('originalSha256')
+            if target.parent!=game or target.suffix.lower()!='.forge':raise ValueError('Unsafe Forge recovery target')
+            if name=='Baseline' and digest!=baseline['hashes'].get(str(target)):raise ValueError('Backup baseline does not match verified game')
+            if digest is not None:
+                origin=Path(row.get('backup') or '').resolve()
+                if not be.within(base/name,origin) or not origin.is_file():raise ValueError('Forge recovery backup missing; existing backups retained')
+                pending=slots[name]/'Originals'/target.relative_to(game)
+                pending.parent.mkdir(parents=True,exist_ok=True)
+                os.link(origin,pending)
+            rows.append(dict(row,backup=str(base/name/'Originals'/target.relative_to(game)) if digest is not None else None))
+        return rows
     try:
         forge_rows={name:[] for name in slots};runtime_rows={name:[] for name in slots};live_hashes={}
-        for row in baseline_doc.get('files',[]):
+        if runtime_only:
+            for name in slots:forge_rows[name]=carry_forges(name)
+        for row in ([] if runtime_only else baseline_doc.get('files',[])):
             target=str(Path(row['target']).resolve());file=Path(target)
             notify('Verifying recovery slots: '+file.name)
             if file.parent!=game or file.suffix.lower()!='.forge' or row['originalSha256']!=baseline['hashes'].get(target):raise ValueError('Backup baseline does not match verified game')
@@ -207,7 +231,8 @@ def rotate(manifest,installation,backups,baseline_receipt,configuration=None,not
         for name,folder in slots.items():
             config=base/name/'CONFIG_TRANSACTION.json'
             be.record_json(folder/'CONFIG_TRANSACTION.json',{'status':'INSTALLED','gameRoot':str(game),'files':runtime_rows[name],'mode':'TWO_SLOT_RUNTIME'})
-            be.record_json(folder/'INSTALL_TRANSACTION.json',{'schema':1,'status':'INSTALLED','gameRoot':str(game),'files':forge_rows[name],'installed':[r['target'] for r in forge_rows[name]],'mode':'TWO_SLOT_'+name.upper(),'baselineId':baseline['baselineId'],'runtimeTransaction':str(config)})
+            forge_doc=dict(carried_docs[name],files=forge_rows[name],runtimeTransaction=str(config)) if runtime_only else {'schema':1,'status':'INSTALLED','gameRoot':str(game),'files':forge_rows[name],'installed':[r['target'] for r in forge_rows[name]],'mode':'TWO_SLOT_'+name.upper(),'baselineId':baseline['baselineId'],'runtimeTransaction':str(config)}
+            be.record_json(folder/'INSTALL_TRANSACTION.json',forge_doc)
         for name,folder in slots.items():
             final=base/name
             if final.exists():
@@ -217,7 +242,7 @@ def rotate(manifest,installation,backups,baseline_receipt,configuration=None,not
         # Retained certificates need the current recovery receipt, not a deleted
         # historical directory. Their original C# content proofs are unchanged.
         stage=Path(manifest or cfg.get('last_stage_manifest') or '')
-        if stage.is_file() and be.within(work,stage):
+        if not runtime_only and stage.is_file() and be.within(work,stage):
             for file in stage.parent.rglob('BATCH_RESULT.json'):
                 doc=mm.load(file,{});changed=False
                 if doc.get('writer')!='FORGE_LAYERED_BATCH_V20':continue

@@ -65,6 +65,35 @@ class BackupSlotTests(unittest.TestCase):
    with patch.object(mm,'WORK',work),patch.object(mm,'CONFIG',work/'settings.json'),patch.object(policy,'STATE',work/'recovery_state.json'):
     with self.assertRaisesRegex(ValueError,'missing or changed'):slots.rotate(None,receipt,base,receipt)
    self.assertTrue(backup.is_file());self.assertTrue(receipt.is_file());self.assertFalse((base/'Baseline').exists())
+ def test_fpv_only_install_preserves_forge_recovery_without_reading_forges_or_stage(self):
+  import config_install as ci
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);work=root/'workspace';work.mkdir();game=root/'game';game.mkdir();(game/'GRB.exe').write_bytes(b'exe')
+   base=work/'backups';forge=game/'DataPC.forge';forge.write_bytes(b'current build');target=game/'NativeFirstPerson.ini';target.write_bytes(b'old FPV')
+   digest=be.sha256(forge);clean=None
+   for name,data in [('Baseline',b'vanilla'),('LastWorking',b'previous build')]:
+    original=base/name/'Originals'/forge.name;original.parent.mkdir(parents=True);original.write_bytes(data)
+    if name=='Baseline':clean=be.sha256(original)
+    be.record_json(base/name/'INSTALL_TRANSACTION.json',{'status':'INSTALLED','gameRoot':str(game),'files':[{'target':str(forge),'backup':str(original),'originalSha256':be.sha256(original),'installedSha256':digest}]})
+   be.record_json(work/'recovery_state.json',{'baselineId':'base','installationPaused':False,'gameRoot':str(game),'hashes':{str(forge):clean}})
+   stage=work/'BATCH_RESULT.json';stage.write_text('{}')
+   be.record_json(work/'settings.json',{'last_stage_manifest':str(stage)})
+   real_hash=be.sha256
+   def runtime_hash(path):
+    self.assertNotEqual(Path(path).suffix.lower(),'.forge','FPV-only install read a Forge')
+    return real_hash(path)
+   with patch.object(mm,'WORK',work),patch.object(mm,'CONFIG',work/'settings.json'),patch.object(policy,'STATE',work/'recovery_state.json'),patch.object(be,'sha256',side_effect=runtime_hash),patch.object(lp,'inspect_stage',side_effect=AssertionError('FPV-only install inspected the complete stage')):
+    for text in ('new FPV','updated FPV'):
+     receipt=ci.install_files([{'target':str(target),'content':text}],game,base,game_check=lambda:[])
+    self.assertEqual(target.read_bytes(),b'updated FPV')
+    ci.restore_files(receipt,game_check=lambda:[])
+    self.assertEqual(target.read_bytes(),b'new FPV')
+    ci.restore_files(base/'Baseline/CONFIG_TRANSACTION.json',game_check=lambda:[])
+    self.assertEqual(target.read_bytes(),b'old FPV')
+   self.assertEqual(forge.read_bytes(),b'current build')
+   self.assertEqual((base/'Baseline/Originals'/forge.name).read_bytes(),b'vanilla')
+   self.assertEqual((base/'LastWorking/Originals'/forge.name).read_bytes(),b'previous build')
+   self.assertEqual({p.name for p in base.iterdir() if p.is_dir()},{'Baseline','LastWorking'})
  def test_existing_history_with_repeated_configuration_versions_has_one_verified_origin(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);work=root/'workspace';work.mkdir();game=root/'game';game.mkdir();base=work/'backups';target=game/'NativeFirstPerson.ini';target.write_bytes(b'original');previous=None

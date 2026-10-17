@@ -85,9 +85,13 @@ def native_panel(parent,owner):
         if cfg.get('preserve_game_sensitivity',False):effective['adsfov']='vanilla'
         search=roots(owner,package)
         def work():
+            owner.notify('Locating the selected FPV package...')
             resolved=ci.resolve_native_package(package,search)
             plan=ci.native_plan(resolved,game,effective,chaining,numbers,toggle_key=key,graphics_compatibility=compat,dx11_single_loader=single)
-            return ci.install_files(plan,game,backup),str(resolved)
+            owner.notify('Installing FPV files and updating runtime recovery backups...')
+            receipt=ci.install_files(plan,game,backup)
+            owner.notify('FPV installation complete.')
+            return receipt,str(resolved)
         def done(result):
             receipt,resolved=result;source.set(resolved)
             cfg=mm.load(mm.CONFIG,{})
