@@ -5,6 +5,35 @@ import backup_slots as slots,batch_engine as be,mod_manager as mm,deployment_pol
 
 
 class BackupSlotTests(unittest.TestCase):
+ def test_fpv_install_retains_edited_reshade_ini_in_lastworking(self):
+  import config_install as ci
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);work=root/'workspace';work.mkdir();game=root/'game';game.mkdir();(game/'GRB.exe').write_bytes(b'exe');base=work/'backups'
+   preset=game/'DEEF_ReShade_Preset.ini';preset.write_bytes(b'original');fpv=game/'NativeFirstPerson.ini'
+   be.record_json(work/'recovery_state.json',{'baselineId':'base','installationPaused':False,'gameRoot':str(game),'hashes':{}})
+   with patch.object(mm,'WORK',work),patch.object(mm,'CONFIG',work/'settings.json'),patch.object(policy,'STATE',work/'recovery_state.json'):
+    ci.install_files([{'target':str(preset),'content':'installed'}],game,base,game_check=lambda:[])
+    preset.write_bytes(b'user effects');stamp=preset.stat().st_mtime_ns
+    receipt=ci.install_files([{'target':str(fpv),'content':'FPV'}],game,base,game_check=lambda:[])
+    self.assertEqual(preset.stat().st_mtime_ns,stamp)
+    doc=mm.load(base/'LastWorking/CONFIG_TRANSACTION.json',{})
+    row=next(r for r in doc['files'] if r['target']==str(preset))
+    self.assertEqual(Path(row['backup']).read_bytes(),b'user effects')
+    ci.restore_files(receipt,game_check=lambda:[])
+    self.assertEqual(preset.read_bytes(),b'user effects')
+    ci.restore_files(base/'Baseline/CONFIG_TRANSACTION.json',game_check=lambda:[])
+    self.assertEqual(preset.read_bytes(),b'original')
+ def test_unrelated_modified_binary_still_blocks_rotation(self):
+  import config_install as ci
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);work=root/'workspace';work.mkdir();game=root/'game';game.mkdir();(game/'GRB.exe').write_bytes(b'exe');base=work/'backups'
+   loader=game/'dxgi.dll'
+   be.record_json(work/'recovery_state.json',{'baselineId':'base','installationPaused':False,'gameRoot':str(game),'hashes':{}})
+   with patch.object(mm,'WORK',work),patch.object(mm,'CONFIG',work/'settings.json'),patch.object(policy,'STATE',work/'recovery_state.json'):
+    ci.install_files([{'target':str(loader),'content':'original loader'}],game,base,game_check=lambda:[])
+    loader.write_bytes(b'unexpected loader')
+    with self.assertRaisesRegex(ValueError,'Runtime changed'):
+     ci.install_files([{'target':str(game/'NativeFirstPerson.ini'),'content':'FPV'}],game,base,game_check=lambda:[])
  def test_current_reshade_preferences_can_be_snapshotted_without_rewriting_them(self):
   import config_install as ci
   with tempfile.TemporaryDirectory() as d:

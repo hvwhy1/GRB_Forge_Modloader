@@ -149,6 +149,12 @@ def native_plan(package,game,choices=None,chain_proxy=False,numeric=None,toggle_
         main=next(r for r in plan if Path(r['target']).name=='NativeFirstPerson.ini')
         text,encoding=(main['content'],main.get('encoding','utf-8')) if 'content' in main else read_ini(main['source'])
         main.update(content=patch_ini_values(text,'FirstPerson',{'DisableLocomotionDOF':'false','DisableLocomotionAutoFocus':'false'}),encoding=encoding)
+    # Keep the master and preset override consistent for both direct installs
+    # and staged installs. Explicit FPV FOV settings are independent of the
+    # game's sensitivity-preservation option.
+    main=next(r for r in plan if Path(r['target']).name=='NativeFirstPerson.ini')
+    text,encoding=read_ini(main['source'])
+    main.update(content=patch_ini_values(main.get('content',text),'FirstPerson',{'FOV':numbers['fov'],'ADSFOV':numbers['adsfov']}),encoding=main.get('encoding',encoding))
     return plan
 
 

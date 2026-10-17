@@ -99,6 +99,19 @@ class GameplayOptionsTests(unittest.TestCase):
 
 class RuntimeGameplayTests(unittest.TestCase):
     fixture=native_fixture
+    def test_explicit_ads_fov_survives_sensitivity_preservation_and_direct_install(self):
+        import config_install as ci
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);game,package=self.fixture(root);run=root/'stage';run.mkdir()
+            choices={'adsfov':'95'}
+            plan=ci.native_plan(package,game,choices,dx11_single_loader=True)
+            for name in ('NativeFirstPerson.ini','ADSFOV.ini'):
+                self.assertIn('ADSFOV=95',next(r['content'] for r in plan if Path(r['target']).name==name))
+            cfg={'native_package':str(package),'native_preset_choices':choices,'native_dx11_single_loader':True,'preserve_game_sensitivity':True}
+            with patch.object(mm,'CONFIG',root/'settings.json'):
+                mm.save(mm.CONFIG,cfg);runtime.prepare({},game,run,notify=lambda _:None)
+            for path in (run/'Runtime/Payloads/NativeFirstPerson.ini',run/'Runtime/Payloads/NativeFirstPersonOptions/ADSFOV.ini'):
+                self.assertIn('ADSFOV=95',path.read_text())
     def test_game_optic_fov_is_preserved_in_master_and_helper(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);game,package=self.fixture(root);run=root/'stage';run.mkdir()

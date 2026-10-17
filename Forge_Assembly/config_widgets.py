@@ -73,7 +73,7 @@ def native_panel(parent,owner):
     ttk.Checkbutton(body,text='Chain a foreign d3d11.dll wrapper (DXGI ReShade stays separate)',variable=chain).grid(row=13,column=0,columnspan=2,sticky='w',pady=6)
     graphics=tk.BooleanVar(value=cfg.get('native_graphics_compatibility',False))
     ttk.Checkbutton(body,text='Graphics compatibility: keep game blur instead of FPV suppression',variable=graphics).grid(row=14,column=0,columnspan=2,sticky='w',pady=6)
-    ttk.Label(body,text='Type FOV 70-140; ADS FOV 0 (vanilla) or 20-140; forward offset 0-0.45 m; near clip 0.001-0.1 m. Game settings in Merge options preserves the game optic FOV instead of the ADS FOV override. Graphics compatibility leaves the game blur behavior unchanged while retaining FPV camera controls. Close the game before installing. Existing files are backed up.',wraplength=760).grid(row=15,column=0,columnspan=2,sticky='w',pady=6)
+    ttk.Label(body,text='Type FOV 70-140; ADS FOV 0 (vanilla) or 20-140; forward offset 0-0.45 m; near clip 0.001-0.1 m. ADS FOV applies independently of game sensitivity preservation; choose vanilla or 0 to retain game optic FOV. Graphics compatibility leaves the game blur behavior unchanged while retaining FPV camera controls. Close the game before installing. Existing files are backed up.',wraplength=760).grid(row=15,column=0,columnspan=2,sticky='w',pady=6)
     def install():
         package=source.get();selected={k:v.get() for k,v in choices.items()};game=owner.paths['game_root'].get();backup=owner.paths['backup_root'].get();chaining=chain.get()
         numbers={k:v.get() for k,v in numeric.items()}
@@ -82,7 +82,6 @@ def native_panel(parent,owner):
         cfg=mm.load(mm.CONFIG,{})
         single=cfg.get('native_dx11_single_loader',True)
         effective=dict(selected)
-        if cfg.get('preserve_game_sensitivity',False):effective['adsfov']='vanilla'
         search=roots(owner,package)
         def work():
             owner.notify('Locating the selected FPV package...')

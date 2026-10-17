@@ -11,7 +11,6 @@ def prepare(mods,game,run,notify=print):
     plan=[];contributions={}
     if cfg.get('native_package'):
         choices=dict(cfg.get('native_preset_choices') or ci.PRESETS)
-        if cfg.get('preserve_game_sensitivity',False):choices['adsfov']='vanilla'
         plan.extend(ci.native_plan(cfg['native_package'],game,choices,cfg.get('native_chain_proxy',False),cfg.get('native_numeric'),toggle_key=cfg.get('native_toggle_key'),graphics_compatibility=cfg.get('native_graphics_compatibility',False),dx11_single_loader=cfg.get('native_dx11_single_loader',True)))
         main=next(r for r in plan if Path(r['target']).name=='NativeFirstPerson.ini')
         text,encoding=ci.read_ini(main['source']);text=main.get('content',text);values={}
@@ -20,7 +19,6 @@ def prepare(mods,game,run,notify=print):
             parser=configparser.ConfigParser(interpolation=None,strict=False);parser.optionxform=str
             parser.read_string(row.get('content') or ci.read_ini(row['source'])[0])
             if parser.has_section('FirstPerson'):values.update(dict(parser.items('FirstPerson')))
-        if cfg.get('preserve_game_sensitivity',False):values['ADSFOV']='0'
         main.update(content=ci.patch_ini_values(text,'FirstPerson',values),encoding=encoding)
     if cfg.get('reshade_setup'):
         import reshade_install as rs

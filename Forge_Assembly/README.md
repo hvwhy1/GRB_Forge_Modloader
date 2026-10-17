@@ -20,6 +20,8 @@ Complete base-parent overrides are inserted before entirely new parents, in sepa
 
 ## FPV package selection and reviewed batches
 
+FPV installs preserve user-edited, previously managed INI preferences (including ReShade presets) in recovery without overwriting them. Changed binaries and missing managed files still require review. The FPV ADS FOV choice is applied to both the master and override INIs for direct and staged installs, independently of game sensitivity preservation. Select vanilla or 0 to retain the game optic FOV.
+
 In First person & ReShade, select the extracted Native First Person package with `core` and `options`. The installer also accepts its `core` folder, master INI, launcher, or an enclosing folder containing one complete package. Find first-person package lists only complete packages; if several are found, choose one explicitly from the dropdown. Selecting the Forge Assembly installer folder alone does not supply FPV binaries. Package settings are saved after a successful installation. New FPV installations default to the proven single DX11 loader.
 
 Install reviewed batch uses the saved current stage automatically. Select a staged batch opens in that stage's folder with its batch JSON preselected. Startup cleanup removes abandoned archive/extraction copies; retired run reports move to `workspace/diagnostics/run_history`, leaving only the current build folder in `workspace/auto_runs`.

@@ -215,7 +215,11 @@ def rotate(manifest,installation,backups,baseline_receipt,configuration=None,not
             historical=next((r for _,doc in history for r in doc.get('files',[]) if r['target']==target and r.get('installedSha256')==current),None)
             if not latest and not older and historical is None:raise ValueError('Historical runtime has unrecorded edits; backups retained: '+target)
             expected=latest.get('installedSha256') if latest else older.get('installedSha256') if older else current
-            if current!=expected:raise ValueError('Runtime changed outside the recorded install; backups retained: '+target)
+            # Owned INIs are user preferences (ReShade saves them from its overlay).
+            # Capture edits in LastWorking without overwriting them or weakening
+            # checks on binaries, missing files, or this transaction's writes.
+            preference_edit=bool(not latest and older and current is not None and file.suffix.lower()=='.ini' and current!=expected)
+            if current!=expected and not preference_edit:raise ValueError('Runtime changed outside the recorded install; backups retained: '+target)
             row=older or latest or historical;origin=source(row);original=row.get('originalSha256')
             ordered=ordered_runtime_original(target,current,history) if not older else None
             if ordered is not None:row=ordered;original=row.get('originalSha256');origin=source(row)
@@ -227,7 +231,7 @@ def rotate(manifest,installation,backups,baseline_receipt,configuration=None,not
                     if original in visited or len({r.get('originalSha256') for r in matches})!=1:raise ValueError('Ambiguous runtime baseline history; backups retained: '+target)
                     visited.add(original);row=matches[0];original=row.get('originalSha256');origin=source(row)
             runtime_rows['Baseline'].append(keep('Baseline',target,original,current,origin))
-            prior_runtime=last_runtime.get(target) if no_change else latest
+            prior_runtime=None if preference_edit else last_runtime.get(target) if no_change else latest
             previous=prior_runtime.get('originalSha256') if prior_runtime else current
             runtime_rows['LastWorking'].append(keep('LastWorking',target,previous,current,source(prior_runtime) if prior_runtime else file if current is not None else None))
         for name,folder in slots.items():
