@@ -187,7 +187,7 @@ def reshade_panel(parent,owner):
     def install():
         exe=setup.get();game=owner.paths['game_root'].get();backup=owner.paths['backup_root'].get()
         chosen=preset.get();local=shaders.get();network=fetch.get();api=renderer.get();override=runtime.get()
-        values=mm.load(mm.CONFIG,{});values.update(reshade_setup=exe,reshade_preset=chosen,reshade_shader_folder=local,reshade_renderer=api,reshade_download_effects=network,reshade_runtime_override=override);mm.save(mm.CONFIG,values)
+        values=mm.load(mm.CONFIG,{});values.update(game_root=game,reshade_setup=exe,reshade_preset=chosen,reshade_shader_folder=local,reshade_renderer=api,reshade_download_effects=network,reshade_runtime_override=override);mm.save(mm.CONFIG,values)
         if api=='vulkan':
             owner.task(lambda:ri.open_vulkan_setup(exe,game),lambda _:owner.status.set('Official Vulkan setup opened - complete installation in that window'))
             return
@@ -198,15 +198,15 @@ def reshade_panel(parent,owner):
     owner.button(top,'Install ReShade',install,True).pack(side='left')
     ttk.Label(top,text='DX11 automatic; Vulkan opens the official setup').pack(side='left',padx=12)
     body=ttk.Frame(frame);body.pack(fill='x');body.columnconfigure(1,weight=1)
-    for row,label,var,kind in [(0,'Official ReShade setup EXE',setup,'exe'),(1,'Preset INI or archive',preset,'preset'),(2,'Shader / texture folder (optional)',shaders,'folder'),(3,'Full add-on runtime DLL (optional)',runtime,'dll')]:
+    for row,label,var,kind in [(0,'Game folder (contains GRB.exe)',owner.paths['game_root'],'folder'),(1,'Official ReShade setup EXE',setup,'exe'),(2,'Preset INI or archive',preset,'preset'),(3,'Shader / texture folder (optional)',shaders,'folder'),(4,'Full add-on runtime DLL (optional)',runtime,'dll')]:
         ttk.Label(body,text=label).grid(row=row,column=0,sticky='w',padx=(0,10),pady=6)
         ttk.Entry(body,textvariable=var).grid(row=row,column=1,sticky='ew',pady=6)
         def browse(v=var,k=kind):
             path=filedialog.askdirectory(parent=owner.root) if k=='folder' else filedialog.askopenfilename(parent=owner.root,filetypes=[('Setup','*.exe')] if k=='exe' else [('Runtime DLL','*.dll')] if k=='dll' else [('Preset','*.ini *.zip *.rar *.7z')])
             if path:v.set(path)
         owner.button(body,'Browse',browse).grid(row=row,column=2,padx=6)
-    ttk.Label(body,text='Renderer').grid(row=4,column=0,sticky='w',pady=6)
-    ttk.Combobox(body,textvariable=renderer,values=['dx11','vulkan'],state='readonly').grid(row=4,column=1,sticky='ew')
+    ttk.Label(body,text='Renderer').grid(row=5,column=0,sticky='w',pady=6)
+    ttk.Combobox(body,textvariable=renderer,values=['dx11','vulkan'],state='readonly').grid(row=5,column=1,sticky='ew')
     ttk.Checkbutton(frame,text='Download required effects and textures from the official ReShade package list',variable=fetch).pack(anchor='w',pady=12)
     def find():
         def scan():

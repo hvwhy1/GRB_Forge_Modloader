@@ -1,6 +1,7 @@
 """ReShade DX11 staging from the official setup payload, with preset dependencies."""
 import configparser
 import io
+import os
 from pathlib import Path,PurePosixPath
 import re
 import urllib.request
@@ -13,6 +14,17 @@ import mod_manager as mm
 import batch_engine as be
 
 MANIFEST='https://raw.githubusercontent.com/crosire/reshade-shaders/list/EffectPackages.ini'
+
+
+def input_path(value):
+    return Path(os.path.expandvars(str(value).strip().strip('"'))).expanduser().resolve()
+
+
+def game_folder(value):
+    path=input_path(value)
+    if path.is_file() and path.name.casefold() in ('grb.exe','grb_vulkan.exe'):path=path.parent
+    if not (path/'GRB.exe').is_file():raise ValueError('RESH_GAME_FOLDER: '+str(path))
+    return path
 
 
 def download(url):
@@ -28,12 +40,13 @@ def download(url):
 
 
 def resolve_preset(path):
-    path=Path(path)
+    path=input_path(path)
+    if not path.is_file() or path.suffix.lower() not in mm.ARCHIVE_EXT|{'.ini'}:
+        raise ValueError('RESH_PRESET_FILE: '+str(path))
     if path.suffix.lower() in mm.ARCHIVE_EXT:
         choices=[m for m in mm.archive_inventory(path) if m.lower().endswith('.ini')]
-        if len(choices)!=1:raise ValueError('Preset archive contains several INIs; extract and choose the intended preset')
+        if len(choices)!=1:raise ValueError('RESH_PRESET_CHOICE: '+str(path)+' contains '+str(len(choices))+' INI files. Extract it and choose the intended preset INI.')
         return mm.extraction_target(path,choices[0])
-    if not path.is_file() or path.suffix.lower()!='.ini':raise ValueError('Choose a preset INI or its archive')
     return path
 
 
@@ -126,11 +139,20 @@ def shader_compatibility(rows):
 
 
 def prepare(setup,game,preset='',shader_folder='',fetch_effects=True,notify=lambda s:None,fetch=download,runtime_override=''):
-    game=Path(game).resolve();setup=Path(setup).resolve();folder=mm.WORK/'reshade_stages'/uuid.uuid4().hex[:12];folder.mkdir(parents=True)
-    if not setup.is_file():raise ValueError('Choose the official ReShade setup executable')
-    with zipfile.ZipFile(setup) as archive:
-        if not {'ReShade32.dll','ReShade64.dll'}<=set(archive.namelist()):raise ValueError('Setup has no official ReShade runtime payload')
-        runtime=folder/'ReShade64.dll';runtime.write_bytes(archive.read('ReShade64.dll'))
+    # Validate all selected locations before staging or downloading dependencies.
+    game=game_folder(game);setup=input_path(setup)
+    if not setup.is_file():raise ValueError('RESH_SETUP_FILE: '+str(setup))
+    preset_file=resolve_preset(preset) if preset else None
+    if shader_folder:
+        shader_folder=input_path(shader_folder)
+        if not shader_folder.is_dir():raise ValueError('Shader / texture folder does not exist: '+str(shader_folder))
+    try:
+        with zipfile.ZipFile(setup) as archive:
+            if not {'ReShade32.dll','ReShade64.dll'}<=set(archive.namelist()):raise ValueError('RESH_SETUP_PAYLOAD: '+str(setup))
+            runtime_bytes=archive.read('ReShade64.dll')
+    except zipfile.BadZipFile as exc:raise ValueError('RESH_SETUP_PAYLOAD: '+str(setup)) from exc
+    folder=mm.WORK/'reshade_stages'/uuid.uuid4().hex[:12];folder.mkdir(parents=True)
+    runtime=folder/'ReShade64.dll';runtime.write_bytes(runtime_bytes)
     if runtime.read_bytes()[:2]!=b'MZ':raise ValueError('Invalid ReShade runtime DLL')
     if runtime_override:runtime.write_bytes(addon_runtime(runtime_override))
     native=game/'NativeFirstPerson.ini';target=game/'dxgi.dll';rows=[]
@@ -151,7 +173,6 @@ def prepare(setup,game,preset='',shader_folder='',fetch_effects=True,notify=lamb
             if be.sha256(supplied)!=digest:continue
             for name in ('ShaderToggler.addon64','ShaderToggler.ini'):
                 rows.append({'source':str(mm.extraction_target(archive,name,archive_hash=fingerprint)),'target':str(game/name)})
-    preset_file=resolve_preset(preset) if preset else None
     preset_text=ci.read_ini(preset_file)[0] if preset_file else ''
     needed=active_effects(preset_text);staged={};local_rows={};families=set()
     if shader_folder:
@@ -201,6 +222,7 @@ def prepare(setup,game,preset='',shader_folder='',fetch_effects=True,notify=lamb
 
 
 def install(setup,game,backups,preset='',shader_folder='',fetch_effects=True,notify=lambda s:None,runtime_override=''):
+    game=game_folder(game);backups=input_path(backups)
     if be.game_processes_running():raise RuntimeError('Close Breakpoint before installing ReShade')
     return ci.install_files(prepare(setup,game,preset,shader_folder,fetch_effects,notify,runtime_override=runtime_override),game,backups)
 

@@ -97,7 +97,9 @@ Supplied shader package folders are kept as a unit: downloaded effects cannot be
 
 ReShade configuration and preset files can be snapshotted without rewriting unchanged content. This records current user preferences for recovery and permits targeted shader repairs to preserve in-game preset edits.
 
-Regression coverage for this revision: 227 tests run, one platform-dependent skip. Private tests cover repeated updates and phase ordering, resource-proof export/install, source changes and global lookups, removal and vanilla restoration, corrupt-stage rejection, one-stage cleanup, three successive installs, standalone config installs, repeated configuration versions, idempotent backups and restoring prior Forge/runtime bytes from a known clean game. A real two-pass laser stage reused its verified Forge on the second pass, retained one stage, produced the same output hash and left the source game untouched.
+The ReShade tab shows its game destination directly. Game, setup, preset and local shader paths are validated before shader staging/downloads, with field-specific messages and the selected path. Quoted paths and environment variables are accepted. A missing GRB.exe is a destination selection error, not a failed game-file replacement.
+
+Regression coverage for this revision: 230 tests run, one platform-dependent skip. Private tests cover repeated updates and phase ordering, resource-proof export/install, source changes and global lookups, removal and vanilla restoration, corrupt-stage rejection, one-stage cleanup, three successive installs, standalone config installs, repeated configuration versions, idempotent backups and restoring prior Forge/runtime bytes from a known clean game. A real two-pass laser stage reused its verified Forge on the second pass, retained one stage, produced the same output hash and left the source game untouched.
 
 ## Performance and verification
 

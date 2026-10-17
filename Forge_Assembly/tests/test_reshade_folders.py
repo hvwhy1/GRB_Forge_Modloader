@@ -1,12 +1,41 @@
-import io,tempfile,unittest,zipfile
+import io,os,tempfile,unittest,zipfile
 from pathlib import Path
 from unittest.mock import patch
 import reshade_install as ri,config_install as ci,mod_manager as mm
 import batch_engine as be
 import deployment_policy as policy
+import friendly_errors
 
 
 class ShaderFolderTests(unittest.TestCase):
+ def test_bad_selections_stop_before_shader_downloads_or_stage_creation(self):
+  for field,code in [('game','RESH_GAME_FOLDER'),('setup','RESH_SETUP_FILE'),('preset','RESH_PRESET_FILE'),('payload','RESH_SETUP_PAYLOAD')]:
+   with self.subTest(field=field),tempfile.TemporaryDirectory() as d:
+    root=Path(d);game,work,setup,local=self.fixture(root)
+    preset=root/'preset.ini';preset.write_text('Techniques=')
+    if field=='game':game=root/'launcher'
+    if field=='setup':setup=root/'missing.exe'
+    if field=='preset':preset=local
+    if field=='payload':setup.write_bytes(b'wrong executable')
+    with patch.object(mm,'WORK',work),patch.object(ri,'download',side_effect=AssertionError('download before validation')) as download:
+     with self.assertRaisesRegex(ValueError,code) as caught:
+      ri.prepare(setup,game,preset,local,fetch=download)
+    download.assert_not_called();self.assertFalse((work/'reshade_stages').exists())
+    title,message,_=friendly_errors.explain(caught.exception,work)
+    self.assertNotEqual(title,'Operation stopped');self.assertIn('Select',title)
+    if field=='game':self.assertIn(str(game),message)
+
+ def test_quoted_paths_environment_variables_and_game_exe_selection_are_normalized(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);game,work,setup,local=self.fixture(root);preset=root/'preset.ini';preset.write_text('Techniques=')
+   with patch.object(mm,'WORK',work),patch.dict(os.environ,{'FORGE_RESHADE_TEST':str(root)}),patch.object(ri.be,'game_processes_running',return_value=[]),patch.object(ci,'install_files',return_value='receipt') as install:
+    result=ri.install('"$FORGE_RESHADE_TEST/setup.exe"','"'+str(game/'GRB.exe')+'"','"'+str(root/'backups')+'"','"'+str(preset)+'"','"'+str(local)+'"',False)
+   self.assertEqual(result,'receipt');self.assertEqual(install.call_args.args[1],game);self.assertEqual(install.call_args.args[2],root/'backups')
+
+ def test_legacy_friend_reports_have_field_specific_guidance(self):
+  with tempfile.TemporaryDirectory() as d:
+   for error in ('Choose the official ReShade setup executable','Choose a preset INI or its archive','Game folder must contain GRB.exe'):
+    title,message,_=friendly_errors.explain(error,Path(d));self.assertNotEqual(title,'Operation stopped');self.assertIn('Select',title)
  def fixture(self,root):
   game=root/'game';game.mkdir();(game/'GRB.exe').write_bytes(b'exe');work=root/'workspace';work.mkdir()
   setup=root/'setup.exe'

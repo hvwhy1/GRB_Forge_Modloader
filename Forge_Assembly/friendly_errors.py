@@ -29,6 +29,21 @@ def explain(error,work):
     elif 'WABO suppressor preset is incomplete:' in technical:
         title='The suppressor preset needs its core files'
         message='The selected WABO suppressor preset requires both its author-supplied core and preset files. Check the WABO archive, then choose an available Suppressor preset in Conflicts & new assets and scan again.'
+    elif 'RESH_GAME_FOLDER:' in technical:
+        target=technical.split('RESH_GAME_FOLDER:',1)[-1].splitlines()[0].strip()
+        title='Select the Breakpoint game folder'
+        message='In Setup, change Game folder to the actual installation folder containing GRB.exe on this computer, then retry Install ReShade. The launcher folder and mod folder are different locations.\n\nSelected folder: '+target
+    elif any(code in technical for code in ('RESH_SETUP_FILE:','RESH_SETUP_PAYLOAD:','Choose the official ReShade setup executable')):
+        title='Select the official ReShade setup EXE'
+        target=next((technical.split(code,1)[-1].splitlines()[0].strip() for code in ('RESH_SETUP_FILE:','RESH_SETUP_PAYLOAD:') if code in technical),'')
+        message='In First person & ReShade, use Browse beside Official ReShade setup EXE and select the downloaded ReShade_Setup executable. Select the EXE file, rather than its folder or a preset.'+('\n\nSelected file: '+target if target else '')
+    elif any(code in technical for code in ('RESH_PRESET_FILE:','RESH_PRESET_CHOICE:','Choose a preset INI or its archive')):
+        title='Select a ReShade preset file'
+        target=next((technical.split(code,1)[-1].splitlines()[0].strip() for code in ('RESH_PRESET_FILE:','RESH_PRESET_CHOICE:') if code in technical),'')
+        message='Beside Preset INI or archive, browse to the author preset INI or an archive containing one preset. Put shader folders in Shader / texture folder. For an archive with several INIs, extract it and choose the intended preset file.'+('\n\nSelected preset: '+target if target else '')
+    elif 'Game folder must contain GRB.exe' in technical:
+        title='Select the Breakpoint game folder'
+        message='In Setup, select the actual game installation folder containing GRB.exe on this computer, then retry. Shader preparation can finish before older builds detect this path error; it does not mean the game files were installed.'
     elif 'FPV_PACKAGE_CHOICE:' in technical:
         title='Choose an FPV package'
         message='More than one complete Native First Person package was found. In First person & ReShade, use Find first-person package and select the intended package from the dropdown, then click Install FPV. Multiple copies are never mixed together.'
