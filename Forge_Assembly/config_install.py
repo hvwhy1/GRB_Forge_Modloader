@@ -213,12 +213,15 @@ def install_files(plan,game,backups,game_check=be.game_processes_running):
             tx['previousConfigTransaction']=str(prior)
     receipt=folder/'CONFIG_TRANSACTION.json';swapped=[]
     try:
+        be.record_json(receipt,tx)
         for target,old,new,data in prepared:
             if old==new:continue
             backup=folder/'Originals'/target.relative_to(game)
             if old:be._copy_verify(target,backup,old)
             record={'target':str(target),'backup':str(backup) if old else None,'originalSha256':old,'installedSha256':new}
-            tx['files'].append(record);be.record_json(receipt,tx)
+            tx['files'].append(record)
+        # Preparation has not changed the game. Publish the complete recovery
+        # journal once, before the first replacement, rather than once per shader.
         tx['status']='INSTALLING';be.record_json(receipt,tx)
         for record in tx['files']:
             if game_check():raise RuntimeError('Game opened during configuration installation')

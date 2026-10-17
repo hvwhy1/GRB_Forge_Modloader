@@ -38,6 +38,10 @@ def explain(error,work):
     elif 'FPV_PACKAGE_NOT_FOUND:' in technical:
         title='Select the FPV source package'
         message='In First person & ReShade, use Find first-person package or browse to the extracted Native First Person folder containing core and options, then click Install FPV. Selecting core or an enclosing download folder is also supported.'
+    elif 'RECEIPT_WRITE_BLOCKED:' in technical:
+        target=technical.split('RECEIPT_WRITE_BLOCKED:',1)[-1].splitlines()[0].strip()
+        title='Windows blocked an installer receipt'
+        message='Windows kept the installer backup receipt unavailable after several retries. This is an installer metadata file, not a ReShade game file. Retry the operation; if it repeats, check folder access and security software.\n\nReceipt: '+target
     elif 'Storage limit:' in technical:
         title='Workspace storage limit reached'
         message='Staging stopped before it could keep growing. Open Diagnostics & recovery and use Clean generated files. The default workspace budget is 200 GiB, with at least 20 GiB kept free on the drive. Required backups are preserved; if they leave too little room, review the storage budget before retrying.'

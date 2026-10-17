@@ -34,9 +34,24 @@ def sha256(path):
 def record_json(path, item):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + '.pending')
-    tmp.write_text(json.dumps(item, indent=2, sort_keys=True), encoding='utf-8')
-    os.replace(tmp, path)
+    tmp = path.with_name(path.name + '.' + uuid.uuid4().hex + '.pending')
+    try:
+        tmp.write_text(json.dumps(item, indent=2, sort_keys=True), encoding='utf-8')
+        # Windows indexers/scanners can briefly deny delete-sharing on a freshly
+        # written receipt. Keep atomic replacement and retry only those errors;
+        # never truncate the last valid receipt or change file permissions.
+        for attempt in range(9):
+            try:
+                os.replace(tmp, path)
+                return
+            except OSError as exc:
+                if getattr(exc,'winerror',None) not in (5,32,33):raise
+                if attempt==8:raise PermissionError('RECEIPT_WRITE_BLOCKED: '+str(path)) from exc
+                time.sleep(min(0.05 * 2**attempt,0.4))
+    finally:
+        # Do not replace a useful exception if Windows also locks the scratch file.
+        try:tmp.unlink(missing_ok=True)
+        except OSError:pass
 
 
 def within(parent, child):
