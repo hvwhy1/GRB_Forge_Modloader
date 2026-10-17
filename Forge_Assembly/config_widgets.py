@@ -219,7 +219,7 @@ def reshade_panel(parent,owner):
             owner.status.set(f'Found {len(exes)} ReShade setups and {len(presets)} preset candidates; review the selected paths')
         owner.task(scan,done)
     owner.button(frame,'Find ReShade setup / preset',find).pack(anchor='w',pady=6)
-    ttk.Label(frame,text='Choose the actual author preset file. DX11 installation stages the runtime and checks active shader dependencies before writing. ReShade uses DXGI alongside the verified Native FPV loader. Close the game first. Config installations can be restored in Diagnostics & recovery.',wraplength=740).pack(anchor='w',pady=12)
+    ttk.Label(frame,text='Choose the actual author preset file. Select reshade-shaders or its Shaders / Textures subfolder to supply local files; local copies take priority over downloads. DX11 installation checks active shader dependencies before writing. ReShade uses DXGI alongside the verified Native FPV loader. Close the game first. Config installations can be restored in Diagnostics & recovery.',wraplength=740).pack(anchor='w',pady=12)
     return {'setup':setup,'preset':preset,'shaders':shaders,'renderer':renderer,'runtime':runtime}
 
 

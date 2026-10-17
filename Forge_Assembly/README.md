@@ -91,7 +91,9 @@ FPV and other runtime-only installs verify runtime files and retain both recover
 
 Receipt writes use bounded retries for temporary Windows access/sharing locks while preserving atomic replacement and the previous valid receipt. Shader installation writes a complete recovery journal before replacing any game files, avoiding a receipt rewrite for each shader.
 
-Regression coverage for this revision: 214 tests run, one platform-dependent skip. Private tests cover repeated updates and phase ordering, resource-proof export/install, source changes and global lookups, removal and vanilla restoration, corrupt-stage rejection, one-stage cleanup, three successive installs, standalone config installs, repeated configuration versions, idempotent backups and restoring prior Forge/runtime bytes from a known clean game. A real two-pass laser stage reused its verified Forge on the second pass, retained one stage, produced the same output hash and left the source game untouched.
+Recovery-folder publication and rollback also retry temporary Windows sharing locks. A blocked folder is reported separately from a locked game file. Local ReShade packs take priority over downloaded copies; select the parent reshade-shaders folder or either Shaders / Textures subfolder.
+
+Regression coverage for this revision: 218 tests run, one platform-dependent skip. Private tests cover repeated updates and phase ordering, resource-proof export/install, source changes and global lookups, removal and vanilla restoration, corrupt-stage rejection, one-stage cleanup, three successive installs, standalone config installs, repeated configuration versions, idempotent backups and restoring prior Forge/runtime bytes from a known clean game. A real two-pass laser stage reused its verified Forge on the second pass, retained one stage, produced the same output hash and left the source game untouched.
 
 ## Performance and verification
 

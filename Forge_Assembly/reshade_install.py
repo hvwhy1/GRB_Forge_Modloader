@@ -113,14 +113,17 @@ def prepare(setup,game,preset='',shader_folder='',fetch_effects=True,notify=lamb
                 rows.append({'source':str(mm.extraction_target(archive,name,archive_hash=fingerprint)),'target':str(game/name)})
     preset_file=resolve_preset(preset) if preset else None
     preset_text=ci.read_ini(preset_file)[0] if preset_file else ''
-    needed=active_effects(preset_text);staged={}
+    needed=active_effects(preset_text);staged={};local_rows={}
     if shader_folder:
         local=Path(shader_folder).resolve()
+        if not local.is_dir():raise ValueError('Shader / texture folder does not exist: '+str(local))
         for file in ci.walk([local]):
             parts=file.relative_to(local).parts
+            if local.name.casefold() in ('shaders','textures'):parts=(local.name,)+parts
             index=next((i for i,p in enumerate(parts) if p.casefold() in ('shaders','textures')),None)
             if index is None:continue
-            rel=Path('reshade-shaders')/Path(*parts[index:]);staged[rel.as_posix()]={'source':str(file),'target':str(game/rel)}
+            category='Shaders' if parts[index].casefold()=='shaders' else 'Textures'
+            rel=Path('reshade-shaders')/category/Path(*parts[index+1:]);local_rows[rel.as_posix().casefold()]={'source':str(file),'target':str(game/rel)}
     if fetch_effects:
         manifest=configparser.ConfigParser(interpolation=None);manifest.read_string(fetch(MANIFEST).decode('utf-8-sig'))
         selected=[section for section in manifest.sections() if manifest.get(section,'Required',fallback='0')=='1' or needed & set(manifest.get(section,'EffectFiles',fallback='').split(','))]
@@ -128,7 +131,9 @@ def prepare(setup,game,preset='',shader_folder='',fetch_effects=True,notify=lamb
             notify('Downloading '+manifest.get(section,'PackageName')+' shader package')
             data=fetch(manifest.get(section,'DownloadUrl'))
             for file in extract_shaders(data,folder,manifest.get(section,'InstallPath'),manifest.get(section,'TextureInstallPath')):
-                rel=file.relative_to(folder);staged[rel.as_posix()]={'source':str(file),'target':str(game/rel)}
+                rel=file.relative_to(folder);staged[rel.as_posix().casefold()]={'source':str(file),'target':str(game/rel)}
+    # Download dependencies without overwriting an explicitly supplied local pack.
+    staged.update(local_rows)
     available={Path(r['target']).name for r in staged.values()}
     if (game/'reshade-shaders').is_dir():available.update(p.name for p in (game/'reshade-shaders').rglob('*.fx'))
     missing=needed-available

@@ -38,6 +38,10 @@ def explain(error,work):
     elif 'FPV_PACKAGE_NOT_FOUND:' in technical:
         title='Select the FPV source package'
         message='In First person & ReShade, use Find first-person package or browse to the extracted Native First Person folder containing core and options, then click Install FPV. Selecting core or an enclosing download folder is also supported.'
+    elif 'BACKUP_RENAME_BLOCKED:' in technical:
+        target=technical.split('BACKUP_RENAME_BLOCKED:',1)[-1].splitlines()[0].strip()
+        title='Windows blocked recovery-folder rotation'
+        message='The game files were installed, but Windows kept a recovery folder unavailable after several retries. Existing recovery data was retained. Retry the installation to finish backup consolidation.\n\nRecovery folder: '+target
     elif 'RECEIPT_WRITE_BLOCKED:' in technical:
         target=technical.split('RECEIPT_WRITE_BLOCKED:',1)[-1].splitlines()[0].strip()
         title='Windows blocked an installer receipt'

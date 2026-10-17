@@ -110,5 +110,37 @@ class BackupSlotTests(unittest.TestCase):
    self.assertEqual((base/'Baseline/Originals'/target.name).read_bytes(),b'original')
    self.assertEqual((base/'LastWorking/Originals'/target.name).read_bytes(),b'current')
 
+ def test_recovery_folder_locks_retry_publication_and_restore_prior_slots_on_failure(self):
+  import config_install as ci
+  for persistent in (False,True):
+   with self.subTest(persistent=persistent),tempfile.TemporaryDirectory() as d:
+    root=Path(d);work=root/'workspace';work.mkdir();game=root/'game';game.mkdir();(game/'GRB.exe').write_bytes(b'exe');base=work/'backups';target=game/'NativeFirstPerson.ini'
+    be.record_json(work/'recovery_state.json',{'baselineId':'base','installationPaused':False,'gameRoot':str(game),'hashes':{}})
+    with patch.object(mm,'WORK',work),patch.object(mm,'CONFIG',work/'settings.json'),patch.object(policy,'STATE',work/'recovery_state.json'):
+     ci.install_files([{'target':str(target),'content':'first'}],game,base,game_check=lambda:[])
+     old={name:(base/name/'CONFIG_TRANSACTION.json').read_bytes() for name in ('Baseline','LastWorking')}
+     replace=be.os.replace;counts={}
+     def blocked(origin,destination):
+      origin=Path(origin);destination=Path(destination)
+      if origin.is_dir():
+       phase=('publish' if '.pending-' in origin.name else 'restore' if '.retired-' in origin.name else 'retire',destination.name.split('.')[0])
+       counts[phase]=counts.get(phase,0)+1
+       if (persistent and phase==('publish','LastWorking')) or counts[phase]<=2:
+        exc=PermissionError('simulated directory sharing lock');exc.winerror=5;raise exc
+      return replace(origin,destination)
+     with patch.object(be.os,'replace',side_effect=blocked),patch.object(be.time,'sleep'):
+      if persistent:
+       with self.assertRaisesRegex(PermissionError,'BACKUP_RENAME_BLOCKED'):ci.install_files([{'target':str(target),'content':'second'}],game,base,game_check=lambda:[])
+      else:ci.install_files([{'target':str(target),'content':'second'}],game,base,game_check=lambda:[])
+     self.assertEqual(target.read_text(),'second')
+     self.assertGreater(counts[('publish','LastWorking')],2)
+     if persistent:
+      for name in old:self.assertEqual((base/name/'CONFIG_TRANSACTION.json').read_bytes(),old[name])
+      raw=next(base.glob('CONFIG_*/CONFIG_TRANSACTION.json'));self.assertEqual(mm.load(raw,{})['status'],'INSTALLED')
+      slots.after_config(raw,game,base)
+     self.assertEqual({p.name for p in base.iterdir() if p.is_dir()},{'Baseline','LastWorking'})
+     ci.restore_files(base/'LastWorking/CONFIG_TRANSACTION.json',game_check=lambda:[])
+     self.assertEqual(target.read_text(),'first')
+
 
 if __name__=='__main__':unittest.main()

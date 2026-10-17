@@ -31,6 +31,18 @@ def sha256(path):
     return h.hexdigest()
 
 
+def replace_with_retry(source,target,*,error_code='RECEIPT_WRITE_BLOCKED',attempts=9):
+    """Keep renames atomic while allowing brief Windows sharing/access locks."""
+    for attempt in range(attempts):
+        try:
+            os.replace(source,target)
+            return
+        except OSError as exc:
+            if getattr(exc,'winerror',None) not in (5,32,33):raise
+            if attempt==attempts-1:raise PermissionError(error_code+': '+str(target)) from exc
+            time.sleep(min(0.05 * 2**attempt,0.4))
+
+
 def record_json(path, item):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -40,14 +52,7 @@ def record_json(path, item):
         # Windows indexers/scanners can briefly deny delete-sharing on a freshly
         # written receipt. Keep atomic replacement and retry only those errors;
         # never truncate the last valid receipt or change file permissions.
-        for attempt in range(9):
-            try:
-                os.replace(tmp, path)
-                return
-            except OSError as exc:
-                if getattr(exc,'winerror',None) not in (5,32,33):raise
-                if attempt==8:raise PermissionError('RECEIPT_WRITE_BLOCKED: '+str(path)) from exc
-                time.sleep(min(0.05 * 2**attempt,0.4))
+        replace_with_retry(tmp,path)
     finally:
         # Do not replace a useful exception if Windows also locks the scratch file.
         try:tmp.unlink(missing_ok=True)

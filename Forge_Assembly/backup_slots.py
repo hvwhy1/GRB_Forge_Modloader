@@ -133,6 +133,8 @@ def rotate(manifest,installation,backups,baseline_receipt,configuration=None,not
     last_runtime={r['target']:r for r in mm.load(base/'LastWorking/CONFIG_TRANSACTION.json',{}).get('files',[])}
     slots={name:base/(name+'.pending-'+uuid.uuid4().hex[:6]) for name in ('Baseline','LastWorking')}
     retired={};published=[];rewrites={};original_cfg=copy.deepcopy(cfg);carried_docs={}
+    def rename(origin,destination):
+        be.replace_with_retry(origin,destination,error_code='BACKUP_RENAME_BLOCKED',attempts=16)
     usage=None;copied=0
     for folder in slots.values():folder.mkdir(parents=True)
     def copy_verified(origin,pending,digest):
@@ -236,8 +238,8 @@ def rotate(manifest,installation,backups,baseline_receipt,configuration=None,not
         for name,folder in slots.items():
             final=base/name
             if final.exists():
-                retired[name]=base/(name+'.retired-'+uuid.uuid4().hex[:6]);os.replace(final,retired[name])
-            os.replace(folder,final);published.append(name)
+                retired[name]=base/(name+'.retired-'+uuid.uuid4().hex[:6]);rename(final,retired[name])
+            rename(folder,final);published.append(name)
         anchor=base/'Baseline/INSTALL_TRANSACTION.json'
         # Retained certificates need the current recovery receipt, not a deleted
         # historical directory. Their original C# content proofs are unchanged.
@@ -261,10 +263,10 @@ def rotate(manifest,installation,backups,baseline_receipt,configuration=None,not
         for file,doc in rewrites.items():be.record_json(file,doc)
         mm.save(mm.CONFIG,original_cfg)
         for name in reversed(published):
-            failure=slots[name];os.replace(base/name,failure)
-            if name in retired:os.replace(retired.pop(name),base/name)
+            failure=slots[name];rename(base/name,failure)
+            if name in retired:rename(retired[name],base/name);retired.pop(name)
         for name,folder in retired.items():
-            if not (base/name).exists():os.replace(folder,base/name)
+            if not (base/name).exists():rename(folder,base/name)
         raise
     finally:
         for folder in slots.values():
